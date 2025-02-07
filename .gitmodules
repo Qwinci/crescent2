@@ -1,0 +1,6 @@
+[submodule "hzutils"]
+	path = hzutils
+	url = https://github.com/Qwinci/hzutils.git
+[submodule "uACPI"]
+	path = uACPI
+	url = https://github.com/uACPI/uACPI.git
