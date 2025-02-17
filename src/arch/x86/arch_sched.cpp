@@ -11,7 +11,7 @@ asm(R"(
 .hidden sched_switch_thread
 .type sched_switch_thread, @function
 
-// void sched_switch_thread(ArchThread* prev, ArchThread* next, KIRQL new_irql)
+// void sched_switch_thread(ArchThread* prev, ArchThread* next)
 sched_switch_thread:
 	push %rbx
 	push %rcx
@@ -33,7 +33,7 @@ sched_switch_thread:
 	mov %rsp, 8(%rcx)
 
 	// current->lock = false
-	movq $0, 184(%rcx)
+	movq $0, 176(%rcx)
 
 	mov 8(%rdx), %rsp
 
@@ -55,9 +55,6 @@ sched_switch_thread:
 	pop %rcx
 	pop %rbx
 
-	// lower irql
-	mov %r8, %cr8
-
 	ret
 .popsection
 )");
@@ -71,6 +68,10 @@ void sched_before_switch(Thread* prev, Thread* thread) {
 			asm volatile("fxsaveq %0" : : "m"(*prev->simd) : "memory");
 		}
 	}
+
+	auto* cpu = thread->cpu;
+	prev->saved_user_sp = cpu->tmp_syscall_reg;
+	cpu->tmp_syscall_reg = thread->saved_user_sp;
 
 	if (thread->process->user) {
 		if (CPU_FEATURES.xsave) {
@@ -122,14 +123,23 @@ asm(R"(
 .globl arch_on_first_switch
 .hidden arch_on_first_switch
 arch_on_first_switch:
+	mov %rcx, %rbx
+	xor %ecx, %ecx
+	call arch_lower_irql
+	mov %rbx, %rcx
+
 	ret
 
 .globl arch_on_first_switch_user
 .hidden arch_on_first_switch_user
 arch_on_first_switch_user:
+	mov %rcx, %rbx
+	xor %ecx, %ecx
+	call arch_lower_irql
+	mov %rbx, %rdx
+
 	xor %eax, %eax
 	xor %ebx, %ebx
-	xor %edx, %edx
 	xor %r8d, %r8d
 	xor %r9d, %r9d
 	xor %r10d, %r10d
@@ -140,6 +150,7 @@ arch_on_first_switch_user:
 	xor %r15d, %r15d
 
 	pop %rcx
+	add $8, %rsp
 	pop %r11
 	pop %rsp
 	swapgs

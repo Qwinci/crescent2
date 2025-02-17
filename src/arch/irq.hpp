@@ -1,5 +1,6 @@
 #pragma once
 #include "arch/arch_irq.hpp"
+#include "arch/arch_irql.hpp"
 #include <hz/list.hpp>
 
 struct KINTERRUPT;
@@ -15,3 +16,5 @@ struct IrqHandler {
 
 void register_irq_handler(u32 num, IrqHandler* handler);
 void deregister_irq_handler(u32 num, IrqHandler* handler);
+
+void arch_request_software_irq(KIRQL level);

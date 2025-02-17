@@ -12,7 +12,24 @@ void dispatch_header_queue_one_waiter(DISPATCHER_HEADER* header) {
 	auto block = hz::container_of(RemoveHeadList(&header->wait_list_head), &KWAIT_BLOCK::wait_list_entry);
 	auto thread = block->thread;
 	block->thread = nullptr;
+	KIRQL old = KeAcquireSpinLockRaiseToDpc(&thread->lock);
 	thread->cpu->scheduler.unblock(thread);
+	KeReleaseSpinLock(&thread->lock, old);
+}
+
+void dispatch_header_queue_all_waiters(DISPATCHER_HEADER* header) {
+	KIRQL old = KfRaiseIrql(DISPATCH_LEVEL);
+
+	while (!IsListEmpty(&header->wait_list_head)) {
+		auto block = hz::container_of(RemoveHeadList(&header->wait_list_head), &KWAIT_BLOCK::wait_list_entry);
+		auto thread = block->thread;
+		block->thread = nullptr;
+		KeAcquireSpinLockAtDpcLevel(&thread->lock);
+		thread->cpu->scheduler.unblock(thread);
+		KeReleaseSpinLockFromDpcLevel(&thread->lock);
+	}
+
+	KeLowerIrql(old);
 }
 
 static constexpr usize THREAD_WAIT_OBJECTS = 3;
@@ -48,6 +65,7 @@ EXPORT NTSTATUS KeWaitForMultipleObjects(
 
 	auto old = KfRaiseIrql(DISPATCH_LEVEL);
 
+	NTSTATUS status;
 	again:
 	u32 actual;
 	if (type == WaitType::Any) {
@@ -77,7 +95,7 @@ EXPORT NTSTATUS KeWaitForMultipleObjects(
 
 					thread->dont_block = false;
 					KeLowerIrql(old);
-					return i;
+					return static_cast<NTSTATUS>(i);
 				}
 			}
 
@@ -126,22 +144,8 @@ EXPORT NTSTATUS KeWaitForMultipleObjects(
 
 	if (timeout) {
 		if (real_timeout == 0) {
-			for (u32 i = 0; i < actual; ++i) {
-				auto& block = wait_block_array[i];
-				auto header = static_cast<DISPATCHER_HEADER*>(block.object);
-
-				acquire_dispatch_header_lock(header);
-
-				if (block.thread) {
-					RemoveEntryList(&block.wait_list_entry);
-				}
-
-				release_dispatch_header_lock(header);
-			}
-
-			thread->dont_block = false;
-			KeLowerIrql(old);
-			return STATUS_TIMEOUT;
+			status = STATUS_TIMEOUT;
+			goto cleanup;
 		}
 
 		if (real_timeout > 0) {
@@ -162,6 +166,24 @@ EXPORT NTSTATUS KeWaitForMultipleObjects(
 		thread->cpu->scheduler.block();
 		goto again;
 	}
+
+	cleanup:
+	for (u32 i = 0; i < actual; ++i) {
+		auto& block = wait_block_array[i];
+		auto header = static_cast<DISPATCHER_HEADER*>(block.object);
+
+		acquire_dispatch_header_lock(header);
+
+		if (block.thread) {
+			RemoveEntryList(&block.wait_list_entry);
+		}
+
+		release_dispatch_header_lock(header);
+	}
+
+	thread->dont_block = false;
+	KeLowerIrql(old);
+	return status;
 }
 
 EXPORT NTSTATUS KeWaitForSingleObject(

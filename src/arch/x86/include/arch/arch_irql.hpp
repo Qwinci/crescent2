@@ -16,9 +16,7 @@ using KIRQL = u8;
 #define HIGH_LEVEL 15
 
 inline KIRQL arch_get_current_irql() {
-	u32 value;
-	asm("mov %%gs:8, %0" : "=r"(value));
-	return value;
+	return *reinterpret_cast<__seg_gs KIRQL*>(8);
 }
 
 inline KIRQL arch_raise_irql(KIRQL new_irql) {
@@ -30,17 +28,20 @@ inline KIRQL arch_raise_irql(KIRQL new_irql) {
 		return current;
 	}
 
-	asm volatile("mov %0, %%gs:8" : : "r"(static_cast<u32>(new_irql)));
+	*reinterpret_cast<__seg_gs KIRQL*>(8) = new_irql;
 #if !CONFIG_LAZY_IRQL
-	asm volatile("mov %0, %%cr8" : : "r"(static_cast<u64>(new_irql)));
+	if (new_irql != APC_LEVEL) {
+		asm volatile("mov %0, %%cr8" : : "r"(static_cast<u64>(new_irql)));
+	}
+	else {
+		asm volatile("mov %0, %%cr8" : : "r"(static_cast<u64>(0)));
+	}
 #endif
 
 	return current;
 }
 
-inline void arch_lower_irql(KIRQL new_irql) {
-	void dispatcher_process();
-
+extern "C" [[gnu::used]] inline void arch_lower_irql(KIRQL new_irql) {
 	auto current = arch_get_current_irql();
 	if (new_irql > current) {
 		panic("[kernel][x86]: specified irql greater than current in arch_lower_irql");
@@ -49,12 +50,21 @@ inline void arch_lower_irql(KIRQL new_irql) {
 		return;
 	}
 
-	if (current >= DISPATCH_LEVEL && new_irql < DISPATCH_LEVEL) {
-		asm volatile("mov %0, %%gs:8" : : "r"(static_cast<u32>(DISPATCH_LEVEL)));
-		asm volatile("mov %0, %%cr8" : : "r"(static_cast<u64>(DISPATCH_LEVEL)));
-		dispatcher_process();
-	}
+	// after this write the hardware irql can be switched to at max new_irql
+	__atomic_store_n(reinterpret_cast<__seg_gs KIRQL*>(8), new_irql, __ATOMIC_RELAXED);
 
-	asm volatile("mov %0, %%gs:8" : : "r"(static_cast<u32>(new_irql)));
-	asm volatile("mov %0, %%cr8" : : "r"(static_cast<u64>(new_irql)));
+#if CONFIG_LAZY_IRQL
+	// if the hardware irql was updated prior to the previous statement then change it back
+	if (new_irql < __atomic_load_n(reinterpret_cast<__seg_gs KIRQL*>(24), __ATOMIC_RELAXED)) {
+		__atomic_store_n(reinterpret_cast<__seg_gs KIRQL*>(24), new_irql, __ATOMIC_RELAXED);
+		asm volatile("mov %0, %%cr8" : : "r"(static_cast<u64>(new_irql)));
+	}
+#else
+	if (new_irql != APC_LEVEL) {
+		asm volatile("mov %0, %%cr8" : : "r"(static_cast<u64>(new_irql)));
+	}
+	else {
+		asm volatile("mov %0, %%cr8" : : "r"(static_cast<u64>(0)));
+	}
+#endif
 }

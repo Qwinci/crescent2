@@ -187,7 +187,7 @@ static void x86_cpu_resume(Cpu* self, Thread* current_thread, bool initial) {
 	self->current_thread = current_thread;
 }
 
-static void x86_init_cpu_common(Cpu* self, u32 lapic_id) {
+static void x86_init_cpu_common(Cpu* self, u32 lapic_id) NO_THREAD_SAFETY_ANALYSIS {
 	self->number = NUM_CPUS.fetch_add(1, hz::memory_order::relaxed);
 	self->lapic_id = lapic_id;
 
@@ -221,9 +221,12 @@ static void x86_init_cpu_common(Cpu* self, u32 lapic_id) {
 	panic("[kernel][x86]: scheduler block returned in ap entry");
 }
 
+void x86_irq_init();
+
 void x86_smp_init() {
 	lapic_first_init();
 	x86_init_idt();
+	x86_irq_init();
 	x86_detect_cpu_features();
 
 	auto resp = SMP_REQUEST.response;

@@ -108,9 +108,9 @@ void lapic_first_init() {
 	SPACE.set_phys(msrs::IA32_APIC_BASE.read() & ~0xFFF, 0x1000);
 	auto status = SPACE.map(CacheMode::Uncached);
 	assert(status);
-	TIMER_IRQ = x86_alloc_irq(1, false);
+	TIMER_IRQ = x86_alloc_irq(1, CLOCK_LEVEL, false);
 	assert(TIMER_IRQ);
-	TMP_IRQ = x86_alloc_irq(1, false);
+	TMP_IRQ = x86_alloc_irq(1, CLOCK_LEVEL, false);
 	assert(TMP_IRQ);
 
 	register_irq_handler(TIMER_IRQ, &LAPIC_IRQ_HANDLER);

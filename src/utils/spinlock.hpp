@@ -1,9 +1,10 @@
 #pragma once
 #include "types.hpp"
 #include "arch/irql.hpp"
+#include "utils/thread_safety.hpp"
 #include <hz/atomic.hpp>
 
-struct KSPIN_LOCK {
+struct CAPABILITY("spinlock") KSPIN_LOCK {
 	hz::atomic<usize> value;
 };
 
@@ -11,10 +12,10 @@ struct EX_SPIN_LOCK {
 	hz::atomic<u32> value;
 };
 
-extern "C" void KeAcquireSpinLockAtDpcLevel(KSPIN_LOCK* lock);
-extern "C" void KeReleaseSpinLockFromDpcLevel(KSPIN_LOCK* lock);
-extern "C" KIRQL KeAcquireSpinLockRaiseToDpc(KSPIN_LOCK* lock);
-extern "C" void KeReleaseSpinLock(KSPIN_LOCK* lock, KIRQL new_irql);
+extern "C" void KeAcquireSpinLockAtDpcLevel(KSPIN_LOCK* lock) ACQUIRE(lock);
+extern "C" void KeReleaseSpinLockFromDpcLevel(KSPIN_LOCK* lock) RELEASE(lock);
+extern "C" KIRQL KeAcquireSpinLockRaiseToDpc(KSPIN_LOCK* lock) ACQUIRE(lock);
+extern "C" void KeReleaseSpinLock(KSPIN_LOCK* lock, KIRQL new_irql) RELEASE(lock);
 
 extern "C" KIRQL ExAcquireSpinLockExclusive(EX_SPIN_LOCK* lock);
 extern "C" KIRQL ExAcquireSpinLockShared(EX_SPIN_LOCK* lock);

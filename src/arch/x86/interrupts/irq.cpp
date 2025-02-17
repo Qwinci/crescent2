@@ -6,19 +6,24 @@
 #include "arch/x86/dev/lapic.hpp"
 #include "arch/arch_irql.hpp"
 #include "arch/irql.hpp"
+#include "assert.hpp"
 #include <hz/spinlock.hpp>
 
 namespace {
 	u32 USED_IRQS[256 / 32] {};
 	u32 USED_SHAREABLE_IRQS[256 / 32] {};
+	u8 DISPATCH_VEC = 0;
 }
 
-u32 x86_alloc_irq(u32 count, bool shared) {
+u32 x86_alloc_irq(u32 count, KIRQL irql, bool shared) {
+	assert(irql >= DISPATCH_LEVEL);
+	irql -= DISPATCH_LEVEL;
+
 	if (!count) {
 		return 0;
 	}
 
-	for (u32 i = 32; i < 256; ++i) {
+	for (u32 i = 32 + irql * 16; i < 256; ++i) {
 		bool found = true;
 
 		for (u32 j = i; j < i + count; ++j) {
@@ -45,7 +50,7 @@ u32 x86_alloc_irq(u32 count, bool shared) {
 	}
 
 	if (shared) {
-		for (u32 i = 32; i < 256; ++i) {
+		for (u32 i = 32 + irql * 16; i < 256; ++i) {
 			bool found = true;
 
 			for (u32 j = i; j < i + count; ++j) {
@@ -112,23 +117,22 @@ extern "C" [[gnu::used]] void arch_irq_handler(IrqFrame* frame, u8 num) {
 
 	auto vec_irql = num / 16;
 	KIRQL old_irql = arch_get_current_irql();
-	if (vec_irql >= 2) {
-		auto hw_irql = vec_irql - 2;
 #if CONFIG_LAZY_IRQL
-		if (hw_irql < old_irql) {
-			asm volatile("mov %0, %%cr8" : : "r"(static_cast<u64>(vec_irql)));
-			// send self-ipi to defer the irq
-			lapic_ipi_self(num);
-			lapic_eoi();
+	if (vec_irql < old_irql) {
+		asm volatile("mov %0, %%cr8" : : "r"(static_cast<u64>(old_irql)));
+		// send self-ipi to defer the irq
+		lapic_ipi_self(num);
+		lapic_eoi();
 
-			if ((frame->cs & 0b11) == 3) {
-				asm volatile("swapgs");
-			}
-			return;
+		__atomic_store_n(reinterpret_cast<__seg_gs KIRQL*>(24), vec_irql, __ATOMIC_RELAXED);
+
+		if ((frame->cs & 0b11) == 3) {
+			asm volatile("swapgs");
 		}
-#endif
-		arch_raise_irql(hw_irql);
+		return;
 	}
+#endif
+	arch_raise_irql(vec_irql);
 
 	asm volatile("sti");
 
@@ -140,13 +144,24 @@ extern "C" [[gnu::used]] void arch_irq_handler(IrqFrame* frame, u8 num) {
 
 	lapic_eoi();
 
-	if (vec_irql >= 2) {
-		KeLowerIrql(old_irql);
-	}
-
 	asm volatile("cli");
+
+	KeLowerIrql(old_irql);
 
 	if ((frame->cs & 0b11) == 3) {
 		asm volatile("swapgs");
 	}
+}
+
+extern IrqHandler DISPATCH_IRQ_HANDLER;
+
+void x86_irq_init() {
+	DISPATCH_VEC = x86_alloc_irq(1, DISPATCH_LEVEL, false);
+	assert(DISPATCH_VEC);
+	register_irq_handler(DISPATCH_VEC, &DISPATCH_IRQ_HANDLER);
+}
+
+void arch_request_software_irq(KIRQL level) {
+	assert(level == DISPATCH_LEVEL);
+	lapic_ipi_self(DISPATCH_VEC);
 }

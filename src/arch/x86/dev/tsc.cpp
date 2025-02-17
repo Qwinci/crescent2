@@ -9,7 +9,7 @@ struct TscClockSource : public ClockSource {
 	explicit TscClockSource(u64 freq) : ClockSource {"tsc", freq}, tsc_per_ms {freq / 1000} {}
 
 	u64 get_ns() override {
-		return rdtsc() * 1000000 / tsc_per_ms;
+		return rdtsc_ordered() * 1000000 / tsc_per_ms;
 	}
 
 	u64 tsc_per_ms;

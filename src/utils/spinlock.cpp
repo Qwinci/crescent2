@@ -1,7 +1,7 @@
 #include "spinlock.hpp"
 #include "export.hpp"
 
-EXPORT void KeAcquireSpinLockAtDpcLevel(KSPIN_LOCK* lock) {
+EXPORT void KeAcquireSpinLockAtDpcLevel(KSPIN_LOCK* lock) ACQUIRE() {
 	while (true) {
 		if (!lock->value.exchange(true, hz::memory_order::acquire)) {
 			break;
@@ -17,7 +17,7 @@ EXPORT void KeAcquireSpinLockAtDpcLevel(KSPIN_LOCK* lock) {
 	}
 }
 
-EXPORT void KeReleaseSpinLockFromDpcLevel(KSPIN_LOCK* lock) {
+EXPORT void KeReleaseSpinLockFromDpcLevel(KSPIN_LOCK* lock) RELEASE() {
 	lock->value.store(false, hz::memory_order::release);
 }
 

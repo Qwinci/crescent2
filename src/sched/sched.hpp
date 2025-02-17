@@ -10,12 +10,14 @@
 #include <hz/container_of.hpp>
 
 struct Scheduler {
+	explicit Scheduler(Cpu* cpu);
+
 	void block();
 
-	void unblock(Thread* thread);
+	bool unblock(Thread* thread) REQUIRES(thread->lock);
 	void sleep(u64 ns);
 
-	void queue(Cpu* cpu, Thread* thread);
+	void queue(Cpu* cpu, Thread* thread) EXCLUDES(thread->lock);
 
 	static void on_timer(Cpu* cpu);
 
@@ -26,8 +28,8 @@ struct Scheduler {
 	static constexpr usize QUANTUM_CLOCK_INTERVALS = 2;
 
 private:
-	void queue_private(Cpu* cpu, Thread* thread);
-	void update_schedule(Cpu* cpu);
+	void queue_private(Cpu* cpu, Thread* thread) REQUIRES(lock, thread->lock);
+	void update_schedule(Cpu* cpu) REQUIRES(lock);
 
 	struct Level {
 		hz::list<Thread, &Thread::hook> threads;
@@ -71,10 +73,11 @@ private:
 		return base;
 	}
 
-	Level levels[32] {};
-	u32 ready_summary {};
-	hz::list<Thread, &Thread::hook> sleeping_threads {};
+	Level levels[32] GUARDED_BY(lock) {};
+	u32 ready_summary GUARDED_BY(lock) {};
+	hz::list<Thread, &Thread::hook> sleeping_threads GUARDED_BY(lock) {};
 	KSPIN_LOCK lock {};
+	KDPC dpc {};
 };
 
 void sched_init();

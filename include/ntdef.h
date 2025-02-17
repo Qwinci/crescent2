@@ -39,6 +39,10 @@ typedef const CHAR* PCSTR;
 typedef WCHAR* PWSTR;
 typedef const WCHAR* PCWSTR;
 
+typedef PVOID HANDLE;
+typedef HANDLE* PHANDLE;
+
+#ifndef _WINNT_H
 typedef union _LARGE_INTEGER {
 	struct {
 		ULONG LowPart;
@@ -50,6 +54,7 @@ typedef union _LARGE_INTEGER {
 	} u;
 	LONGLONG QuadPart;
 } LARGE_INTEGER;
+#endif
 
 typedef LARGE_INTEGER PHYSICAL_ADDRESS, *PPHYSICAL_ADDRESS;
 
@@ -87,6 +92,14 @@ FORCEINLINE BOOLEAN RemoveEntryList(PLIST_ENTRY Entry) {
 	return Entry->Flink == prev;
 }
 
+FORCEINLINE void InsertHeadList(PLIST_ENTRY ListHead, PLIST_ENTRY Entry) {
+	PLIST_ENTRY old = ListHead->Flink;
+	ListHead->Flink = Entry;
+	Entry->Flink = old;
+	Entry->Blink = ListHead;
+	old->Blink = Entry;
+}
+
 FORCEINLINE void InsertTailList(PLIST_ENTRY ListHead, PLIST_ENTRY Entry) {
 	PLIST_ENTRY old = ListHead->Blink;
 	ListHead->Blink = Entry;
@@ -103,18 +116,22 @@ typedef LONG NTSTATUS;
 #define NT_ERROR(Status) (((ULONG) (Status) >> 30) == 3)
 
 #define STATUS_SUCCESS (NTSTATUS) 0
+#define STATUS_USER_APC (NTSTATUS) 0xC0
 #define STATUS_TIMEOUT (NTSTATUS) 0x102
 #define STATUS_NOT_IMPLEMENTED (NTSTATUS) 0xC0000002
 #define STATUS_INVALID_PARAMETER (NTSTATUS) 0xC000000D
+#define STATUS_MORE_PROCESSING_REQUIRED (NTSTATUS) 0xC0000016
 #define STATUS_NO_MEMORY (NTSTATUS) 0xC0000017
 #define STATUS_BUFFER_TOO_SMALL (NTSTATUS) 0xC0000023
 #define STATUS_NOT_FOUND (NTSTATUS) 0xC0000225
 
+#ifndef _WINTERNL_H
 typedef struct _UNICODE_STRING {
 	USHORT Length;
 	USHORT MaximumLength;
 	PWSTR Buffer;
 } UNICODE_STRING, *PUNICODE_STRING, *const PCUNICODE_STRING;
+#endif
 
 #ifdef __cplusplus
 }

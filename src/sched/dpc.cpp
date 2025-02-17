@@ -1,6 +1,7 @@
 #include "dpc.hpp"
 #include "arch/cpu.hpp"
 #include "assert.hpp"
+#include "arch/irq.hpp"
 
 void KeInitializeDpc(KDPC* dpc, PKDEFERRED_ROUTINE deferred_routine, void* deferred_ctx) {
 	dpc->target_info = 0;
@@ -19,8 +20,10 @@ bool KeInsertQueueDpc(KDPC* dpc, void* system_arg1, void* system_arg2) {
 
 	auto cpu = CPUS[dpc->number];
 
-	KIRQL irql;
-	KeAcquireSpinLock(&cpu->dpc_list_lock, &irql);
+	// high level is needed to prevent getting interrupted by any code at all
+	KIRQL old = KfRaiseIrql(HIGH_LEVEL);
+
+	KeAcquireSpinLockAtDpcLevel(&cpu->dpc_list_lock);
 
 	dpc->system_arg1 = system_arg1;
 	dpc->system_arg2 = system_arg2;
@@ -37,7 +40,11 @@ bool KeInsertQueueDpc(KDPC* dpc, void* system_arg1, void* system_arg2) {
 		cpu->dpc_list_tail = &dpc->dpc_list_entry;
 	}
 
-	KeReleaseSpinLock(&cpu->dpc_list_lock, irql);
+	if (cpu == get_current_cpu()) {
+		arch_request_software_irq(DISPATCH_LEVEL);
+	}
+
+	KeReleaseSpinLock(&cpu->dpc_list_lock, old);
 	return true;
 }
 
@@ -47,24 +54,27 @@ void process_dpcs() {
 	auto* cpu = get_current_cpu();
 
 	while (true) {
-		KIRQL irql;
-		KeAcquireSpinLock(&cpu->dpc_list_lock, &irql);
-		assert(irql == DISPATCH_LEVEL);
+		KfRaiseIrql(HIGH_LEVEL);
+		KeAcquireSpinLockAtDpcLevel(&cpu->dpc_list_lock);
 
 		auto entry = cpu->dpc_list_head.Next;
 		KDPC* dpc;
+		void* ctx;
+		void* arg0;
+		void* arg1;
 		if (entry) {
 			cpu->dpc_list_head.Next = entry->Next;
 			dpc = hz::container_of(entry, &KDPC::dpc_list_entry);
+			ctx = dpc->deferred_ctx;
+			arg0 = dpc->system_arg1;
+			arg1 = dpc->system_arg2;
+			dpc->dpc_data = nullptr;
 		}
 
-		KeReleaseSpinLock(&cpu->dpc_list_lock, irql);
+		KeReleaseSpinLockFromDpcLevel(&cpu->dpc_list_lock);
+		KeLowerIrql(DISPATCH_LEVEL);
 
 		if (entry) {
-			volatile auto ctx = dpc->deferred_ctx;
-			volatile auto arg0 = dpc->system_arg1;
-			volatile auto arg1 = dpc->system_arg2;
-			dpc->dpc_data = nullptr;
 			dpc->deferred_routine(
 				dpc,
 				ctx,
@@ -85,3 +95,12 @@ void dispatcher_process() {
 		cpu->scheduler.handle_quantum_end(cpu);
 	}
 }
+
+bool dispatch_interrupt(KINTERRUPT*, void*) {
+	dispatcher_process();
+	return true;
+}
+
+IrqHandler DISPATCH_IRQ_HANDLER {
+	.fn = dispatch_interrupt
+};

@@ -4,7 +4,7 @@
 #include "wait.hpp"
 
 EXPORT void KeInitializeSemaphore(KSEMAPHORE* semaphore, i32 count, i32 limit) {
-	semaphore->header.lock.store(0, hz::memory_order::relaxed);
+	semaphore->header.reserved.store(0, hz::memory_order::relaxed);
 	semaphore->header.signal_state = count;
 	semaphore->limit = limit;
 	InitializeListHead(&semaphore->header.wait_list_head);
@@ -20,16 +20,10 @@ EXPORT i32 KeReleaseSemaphore(KSEMAPHORE* semaphore, KPRIORITY increment, i32 ad
 	auto old = KfRaiseIrql(DISPATCH_LEVEL);
 	acquire_dispatch_header_lock(&semaphore->header);
 
-	auto state = semaphore->header.signal_state;
-
-	semaphore->header.signal_state = state + adjustment;
-
-	if (state == 0) {
-		dispatch_header_queue_one_waiter(&semaphore->header);
-	}
+	dispatch_header_queue_one_waiter(&semaphore->header);
 
 	release_dispatch_header_lock(&semaphore->header);
 	KeLowerIrql(old);
 
-	return state;
+	return 0;
 }

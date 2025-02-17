@@ -9,10 +9,11 @@ struct ArchCpu {
 	constexpr explicit ArchCpu(u32 number) : legacy_number {static_cast<u8>(number)}, number {number} {}
 
 	ArchCpu* self {this};
-	u32 irql{};
+	u32 irql {};
 	u32 lapic_id {};
 	u64 tmp_syscall_reg {};
-	u8 pad0[8] {};
+	u8 hw_irql {};
+	u8 pad0[7] {};
 	void* extension {&kernel_mxcsr};
 	Tss tss {};
 	hz::manually_init<LapicTickSource> tick_source {};
@@ -33,6 +34,10 @@ struct ArchCpu {
 static_assert(offsetof(ArchCpu, irql) == 8);
 // user in usermode.S
 static_assert(offsetof(ArchCpu, tmp_syscall_reg) == 16);
+static_assert(offsetof(ArchCpu, tss) == 40);
+static_assert(offsetof(Tss, rsp0_low) == 4);
+
+static_assert(offsetof(ArchCpu, hw_irql) == 24);
 
 static_assert(offsetof(ArchCpu, pad2) == 0x178);
 
@@ -51,6 +56,6 @@ inline Cpu* get_current_cpu() {
 inline u64 get_cycle_count() {
 	u32 low;
 	u32 high;
-	asm("rdtsc" : "=a"(low), "=d"(high));
+	asm volatile("lfence; rdtsc" : "=a"(low), "=d"(high));
 	return static_cast<u64>(high) << 32 | low;
 }

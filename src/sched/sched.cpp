@@ -1,6 +1,7 @@
 #include "sched.hpp"
 #include "arch/cpu.hpp"
 #include "assert.hpp"
+#include "utils/thread_safety.hpp"
 #include <hz/bit.hpp>
 
 namespace {
@@ -17,6 +18,17 @@ namespace {
 	while (true) {
 		arch_hlt();
 	}
+}
+
+Scheduler::Scheduler(Cpu* cpu) {
+	// KeInitializeDpc can't be used here as the current cpu is not yet initialized
+	dpc.importance = static_cast<u8>(DpcImportance::Medium);
+	dpc.number = cpu->number;
+	dpc.deferred_routine = [](KDPC* dpc, void* deferred_ctx, void* system_arg1, void* system_arg2) {
+		auto* cpu = static_cast<Cpu*>(deferred_ctx);
+		cpu->scheduler.handle_quantum_end(cpu);
+	};
+	dpc.deferred_ctx = cpu;
 }
 
 void Scheduler::queue_private(Cpu* cpu, Thread* thread) {
@@ -52,69 +64,70 @@ void Scheduler::update_schedule(Cpu* cpu) {
 }
 
 void sched_before_switch(Thread* prev, Thread* next);
-extern "C" void sched_switch_thread(Thread* prev, Thread* next, KIRQL new_irql);
+extern "C" void sched_switch_thread(Thread* prev, Thread* next) RELEASE(prev->lock);
 
 void Scheduler::block() {
 	auto current = get_current_thread();
 
 	// raising the irql to DISPATCH_LEVEL also prevents preemption
-	KIRQL irql = KeAcquireSpinLockRaiseToDpc(&lock);
+	auto old = KfRaiseIrql(DISPATCH_LEVEL);
 
 	KeAcquireSpinLockAtDpcLevel(&current->lock);
 	if (current->dont_block) {
 		current->dont_block = false;
-		KeReleaseSpinLockFromDpcLevel(&current->lock);
-		KeReleaseSpinLock(&lock, irql);
+		KeReleaseSpinLock(&current->lock, old);
 		return;
 	}
 
 	current->status = ThreadStatus::Waiting;
 
 	auto cpu = get_current_cpu();
+
+	KeAcquireSpinLockAtDpcLevel(&lock);
+
 	update_schedule(cpu);
 
-	current->saved_irql = irql;
-
-	// todo atomic relaxed store
 	cpu->current_thread = cpu->next_thread;
 	cpu->next_thread = nullptr;
 
-	// keep irql at DISPATCH_LEVEL to prevent preemption
-	KeReleaseSpinLock(&lock, DISPATCH_LEVEL);
+	KeReleaseSpinLockFromDpcLevel(&lock);
 
 	cpu->current_thread->status = ThreadStatus::Running;
 	cpu->current_thread->process->page_map.use();
 
 	sched_before_switch(current, cpu->current_thread);
-	// todo make these relaxed atomic stores
 	cpu->current_thread->last_run_start_cycles = get_cycle_count();
-	asm volatile("" : : : "memory");
 	cpu->quantum_end = false;
-	asm volatile("" : : : "memory");
-	sched_switch_thread(current, cpu->current_thread, cpu->current_thread->saved_irql);
+	sched_switch_thread(current, cpu->current_thread);
 
 	// restore old irql
-	KeLowerIrql(irql);
+	KeLowerIrql(old);
 }
 
-void Scheduler::unblock(Thread* thread) {
-	KIRQL irql = KeAcquireSpinLockRaiseToDpc(&thread->lock);
+bool Scheduler::unblock(Thread* thread) {
+	assert(KeGetCurrentIrql() == DISPATCH_LEVEL);
+	assert(thread->lock.value.load(hz::memory_order::relaxed));
+
+	assert(&thread->cpu->scheduler == this);
 
 	if (thread->status != ThreadStatus::Waiting && thread->status != ThreadStatus::Sleeping) {
 		if (thread->status == ThreadStatus::Running) {
 			thread->dont_block = true;
 		}
-		KeReleaseSpinLock(&thread->lock, irql);
-		return;
+		return false;
 	}
+
+	KeAcquireSpinLockAtDpcLevel(&lock);
 
 	if (thread->status == ThreadStatus::Sleeping) {
 		sleeping_threads.remove(thread);
 	}
 
-	queue(thread->cpu, thread);
+	queue_private(thread->cpu, thread);
 
-	KeReleaseSpinLock(&thread->lock, irql);
+	KeReleaseSpinLockFromDpcLevel(&lock);
+
+	return true;
 }
 
 void Scheduler::sleep(u64 ns) {
@@ -125,17 +138,18 @@ void Scheduler::sleep(u64 ns) {
 	auto current = get_current_thread();
 
 	// raising the irql to DISPATCH_LEVEL also prevents preemption
-	KIRQL irql = KeAcquireSpinLockRaiseToDpc(&lock);
+	auto old = KfRaiseIrql(DISPATCH_LEVEL);
 
 	KeAcquireSpinLockAtDpcLevel(&current->lock);
 	if (current->dont_block) {
 		current->dont_block = false;
-		KeReleaseSpinLockFromDpcLevel(&current->lock);
-		KeReleaseSpinLock(&lock, irql);
+		KeReleaseSpinLock(&current->lock, old);
 		return;
 	}
 
 	u64 sleep_end = CLOCK_SOURCE->get_ns() + ns;
+
+	KeAcquireSpinLockAtDpcLevel(&lock);
 
 	Thread* next_sleeping = nullptr;
 	for (auto& thread : sleeping_threads) {
@@ -153,38 +167,34 @@ void Scheduler::sleep(u64 ns) {
 	auto cpu = get_current_cpu();
 	update_schedule(cpu);
 
-	current->saved_irql = irql;
-
-	// todo atomic relaxed store
 	cpu->current_thread = cpu->next_thread;
 	cpu->next_thread = nullptr;
 
-	// keep irql at DISPATCH_LEVEL to prevent preemption
-	KeReleaseSpinLock(&lock, DISPATCH_LEVEL);
+	KeReleaseSpinLockFromDpcLevel(&lock);
 
 	cpu->current_thread->status = ThreadStatus::Running;
 	cpu->current_thread->process->page_map.use();
 
 	sched_before_switch(current, cpu->current_thread);
-	// todo make these relaxed atomic stores
 	cpu->current_thread->last_run_start_cycles = get_cycle_count();
-	asm volatile("" : : : "memory");
 	cpu->quantum_end = false;
-	asm volatile("" : : : "memory");
-	sched_switch_thread(current, cpu->current_thread, cpu->current_thread->saved_irql);
+	sched_switch_thread(current, cpu->current_thread);
 
 	// restore old irql
-	KeLowerIrql(irql);
+	KeLowerIrql(old);
 }
 
 void Scheduler::queue(Cpu* cpu, Thread* thread) {
 	KIRQL irql = KeAcquireSpinLockRaiseToDpc(&lock);
+	KeAcquireSpinLockAtDpcLevel(&thread->lock);
 	queue_private(cpu, thread);
+	KeReleaseSpinLockFromDpcLevel(&thread->lock);
 	KeReleaseSpinLock(&lock, irql);
 }
 
 void Scheduler::handle_quantum_end(Cpu* cpu) {
-	KIRQL irql = KeAcquireSpinLockRaiseToDpc(&lock);
+	assert(KeGetCurrentIrql() == DISPATCH_LEVEL);
+	KeAcquireSpinLockAtDpcLevel(&lock);
 
 	auto now = CLOCK_SOURCE->get_ns();
 	for (auto& thread : sleeping_threads) {
@@ -194,7 +204,7 @@ void Scheduler::handle_quantum_end(Cpu* cpu) {
 
 		KeAcquireSpinLockAtDpcLevel(&thread.lock);
 		sleeping_threads.remove(&thread);
-		queue(thread.cpu, &thread);
+		queue_private(thread.cpu, &thread);
 		KeReleaseSpinLockFromDpcLevel(&thread.lock);
 	}
 
@@ -204,27 +214,25 @@ void Scheduler::handle_quantum_end(Cpu* cpu) {
 
 	if (!cpu->next_thread) {
 		set_thread_expiry(cpu, cpu->current_thread);
-		KeReleaseSpinLock(&lock, irql);
+		KeReleaseSpinLockFromDpcLevel(&lock);
 		return;
 	}
 
-	KeAcquireSpinLockAtDpcLevel(&cpu->current_thread->lock);
-
 	auto prev = cpu->current_thread;
-	prev->saved_irql = irql;
+	KeAcquireSpinLockAtDpcLevel(&prev->lock);
 
 	queue_private(cpu, prev);
 	cpu->current_thread = cpu->next_thread;
 	cpu->next_thread = nullptr;
 
-	KeReleaseSpinLock(&lock, irql);
+	KeReleaseSpinLockFromDpcLevel(&lock);
 
 	cpu->current_thread->status = ThreadStatus::Running;
 	cpu->current_thread->process->page_map.use();
 
 	sched_before_switch(prev, cpu->current_thread);
 	cpu->current_thread->last_run_start_cycles = get_cycle_count();
-	sched_switch_thread(prev, cpu->current_thread, cpu->current_thread->saved_irql);
+	sched_switch_thread(prev, cpu->current_thread);
 }
 
 void Scheduler::on_timer(Cpu* cpu) {
@@ -241,7 +249,7 @@ void Scheduler::on_timer(Cpu* cpu) {
 	else {
 		current->cycle_quota = 0;
 		cpu->quantum_end = true;
-		// quantum end processing is triggered when irql is lowered later on in arch-specific irq handler
+		KeInsertQueueDpc(&cpu->scheduler.dpc, nullptr, nullptr);
 	}
 
 	cpu->tick_source->oneshot(Scheduler::CLOCK_INTERVAL_MS * 1000);

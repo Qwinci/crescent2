@@ -26,6 +26,12 @@ enum class ThreadStatus {
 
 struct Cpu;
 
+enum class KPROCESSOR_MODE : i8 {
+	Kernel = 0,
+	User = 1,
+	Max = 2
+};
+
 struct Thread : public ArchThread {
 	Thread(kstd::wstring_view name, Cpu* cpu, Process* process);
 	Thread(kstd::wstring_view name, Cpu* cpu, Process* process, void (*fn)(void*), void* arg);
@@ -42,14 +48,13 @@ struct Thread : public ArchThread {
 	u64 cycle_quota {};
 	ThreadPriority priority {ThreadPriority::Normal};
 	ThreadStatus status {};
-	KIRQL saved_irql {PASSIVE_LEVEL};
 	KSPIN_LOCK lock {};
-	volatile bool dont_block {};
+	bool dont_block {};
 	u64 sleep_end_ns {};
 };
 
 #ifdef __x86_64__
-static_assert(offsetof(Thread, lock) == 184);
+static_assert(offsetof(Thread, lock) == 176);
 #else
 #error unsupported architecture
 #endif

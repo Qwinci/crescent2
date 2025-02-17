@@ -28,12 +28,8 @@ enum class KWAIT_REASON {
 	Executive
 };
 
-enum class KPROCESSOR_MODE : i8 {
-	Kernel = 0,
-	User = 0
-};
-
-void dispatch_header_queue_one_waiter(DISPATCHER_HEADER* header);
+void dispatch_header_queue_one_waiter(DISPATCHER_HEADER* header) REQUIRES(header);
+void dispatch_header_queue_all_waiters(DISPATCHER_HEADER* header) REQUIRES(header);
 extern "C" NTSTATUS KeWaitForMultipleObjects(
 	u32 count,
 	void* objects[],

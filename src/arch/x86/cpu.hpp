@@ -8,7 +8,7 @@ struct Msr {
 	[[nodiscard]] inline u64 read() const {
 		u32 low;
 		u32 high;
-		asm("rdmsr" : "=a"(low), "=d"(high) : "c"(offset));
+		asm volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(offset));
 		return static_cast<u64>(low) | static_cast<u64>(high) << 32;
 	}
 
@@ -58,6 +58,13 @@ inline u64 rdtsc() {
 	u32 low;
 	u32 high;
 	asm volatile("rdtsc" : "=a"(low), "=d"(high));
+	return static_cast<u64>(high) << 32 | low;
+}
+
+inline u64 rdtsc_ordered() {
+	u32 low;
+	u32 high;
+	asm volatile("lfence; rdtsc" : "=a"(low), "=d"(high));
 	return static_cast<u64>(high) << 32 | low;
 }
 

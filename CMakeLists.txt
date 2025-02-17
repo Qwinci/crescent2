@@ -33,6 +33,7 @@ target_compile_options(crescent PRIVATE
 	$<$<COMPILE_LANGUAGE:CXX>: ${COMMON_CXXFLAGS}>
 	$<$<COMPILE_LANGUAGE:C>: ${COMMON_CFLAGS}>
 	--target=${ARCH}-unknown-windows-elf
+	-Wthread-safety-analysis -Werror=thread-safety-analysis
 )
 target_link_options(crescent PRIVATE
 	-nostdlib

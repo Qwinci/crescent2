@@ -21,8 +21,18 @@
 #define WINAPI __stdcall
 #define CONST const
 
+typedef char CHAR;
 typedef short SHORT;
+typedef int INT;
+typedef int LONG;
+typedef long long LONGLONG;
+
+typedef unsigned char UCHAR;
 typedef unsigned short USHORT;
+typedef unsigned int UINT;
+typedef unsigned int ULONG, *PULONG;
+typedef unsigned long long ULONGLONG;
+
 typedef int BOOL;
 
 typedef DWORD* LPDWORD;
