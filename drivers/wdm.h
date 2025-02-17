@@ -21,6 +21,12 @@ typedef ULONG POOL_FLAGS;
 NTKERNELAPI PVOID ExAllocatePool2(POOL_FLAGS Flags, SIZE_T NumberOfBytes, ULONG Tag);
 NTKERNELAPI void ExFreePool(PVOID P);
 
+NTKERNELAPI void ObfReferenceObject(PVOID Object);
+NTKERNELAPI void ObfDereferenceObject(PVOID Object);
+
+#define ObReferenceObject(Object) ObfReferenceObject(Object)
+#define ObDereferenceObject(Object) ObfDereferenceObject(Object)
+
 typedef enum _MEMORY_CACHING_TYPE {
 	MmNonCached,
 	MmCached,
@@ -68,7 +74,6 @@ NTKERNELAPI ULONG HalSetBusDataByOffset(
 #define IRP_MJ_MAXIMUM_FUNCTION 0x1B
 
 // pnp minor functions
-
 #define IRP_MN_START_DEVICE 0
 #define IRP_MN_QUERY_REMOVE_DEVICE 1
 #define IRP_MN_REMOVE_DEVICE 2
@@ -85,6 +90,7 @@ NTKERNELAPI ULONG HalSetBusDataByOffset(
 #define IRP_MN_QUERY_RESOURCE_REQUIREMENTS 11
 #define IRP_MN_QUERY_DEVICE_TEXT 12
 #define IRP_MN_FILTER_RESOURCE_REQUIREMENTS 13
+#define IRP_MN_QUERY_ID 19
 
 #define DECLSPEC_ALIGN(align_value) __declspec(align(align_value))
 
@@ -138,7 +144,14 @@ typedef struct _KEVENT {
 } KEVENT, *PKEVENT;
 
 typedef struct _MDL {
-
+	struct _MDL* Next;
+	CSHORT Size;
+	CSHORT MdlFlags;
+	struct _EPROCESS* Process;
+	PVOID MappedSystemVa;
+	PVOID StartVa;
+	ULONG ByteCount;
+	ULONG ByteOffset;
 } MDL, *PMDL;
 
 typedef struct _IO_STATUS_BLOCK {
@@ -293,8 +306,49 @@ typedef void (*PDRIVER_CANCEL)(
 
 typedef struct _ETHREAD* PETHREAD;
 
-typedef struct _FILE_OBJECT {
+typedef struct _SECTION_OBJECT_POINTERS {
+	PVOID DataSectionObject;
+	PVOID SharedCacheMap;
+	PVOID ImageSectionObject;
+} SECTION_OBJECT_POINTERS, *PSECTION_OBJECT_POINTERS;
 
+typedef struct _IO_COMPLETION_CONTEXT {
+	PVOID Port;
+	PVOID Key;
+	LONG_PTR UsageCount;
+} IO_COMPLETION_CONTEXT, *PIO_COMPLETION_CONTEXT;
+
+typedef struct _FILE_OBJECT {
+	CSHORT Type;
+	CSHORT Size;
+	PDEVICE_OBJECT DeviceObject;
+	PVPB Vpb;
+	PVOID FsContext;
+	PVOID FsContext2;
+	PSECTION_OBJECT_POINTERS SectionObjectPointer;
+	PVOID PrivateCacheMap;
+	NTSTATUS FinalStatus;
+	struct _FILE_OBJECT* RelatedFileObject;
+	BOOLEAN LockOperation;
+	BOOLEAN DeletePending;
+	BOOLEAN ReadAccess;
+	BOOLEAN WriteAccess;
+	BOOLEAN DeleteAccess;
+	BOOLEAN SharedRead;
+	BOOLEAN SharedWrite;
+	BOOLEAN SharedDelete;
+	ULONG Flags;
+	UNICODE_STRING FileName;
+	LARGE_INTEGER CurrentByteOffset;
+	volatile ULONG Waiters;
+	volatile ULONG Busy;
+	PVOID LastLock;
+	KEVENT Lock;
+	KEVENT Event;
+	volatile PIO_COMPLETION_CONTEXT CompletionContext;
+	KSPIN_LOCK IrpListLock;
+	LIST_ENTRY IrpList;
+	volatile PVOID FileObjectExtension;
 } FILE_OBJECT, *PFILE_OBJECT;
 
 typedef struct _IRP IRP, *PIRP;
@@ -303,6 +357,13 @@ typedef NTSTATUS (*PIO_COMPLETION_ROUTINE)(
 	PDEVICE_OBJECT DeviceObject,
 	PIRP Irp,
 	PVOID Context);
+
+// IO_STACK_LOCATION control flags
+#define SL_PENDING_RETURNED 1
+#define SL_ERROR_RETURNED 2
+#define SL_INVOKE_ON_CANCEL 0x20
+#define SL_INVOKE_ON_SUCCESS 0x40
+#define SL_INVOKE_ON_ERROR 0x80
 
 typedef enum _DEVICE_RELATION_TYPE {
 	BusRelations,
@@ -409,6 +470,18 @@ typedef struct _CM_RESOURCE_LIST {
 	CM_FULL_RESOURCE_DESCRIPTOR List[];
 } CM_RESOURCE_LIST, *PCM_RESOURCE_LIST;
 
+typedef enum {
+	BusQueryDeviceID = 0,
+	BusQueryHardwareIDs = 1,
+	BusQueryCompatibleIDs = 2,
+	BusQueryInstanceID = 3,
+	BusQueryDeviceSerialNumber = 4,
+	BusQueryContainerID = 5
+} BUS_QUERY_ID_TYPE, *PBUS_QUERY_ID_TYPE;
+
+#define MAX_DEVICE_ID_LEN 200
+#define REGSTR_VAL_MAX_HCID_LEN 1024
+
 typedef struct _IO_STACK_LOCATION {
 	UCHAR MajorFunction;
 	UCHAR MinorFunction;
@@ -418,6 +491,10 @@ typedef struct _IO_STACK_LOCATION {
 		struct {
 			DEVICE_RELATION_TYPE Type;
 		} QueryDeviceRelations;
+
+		struct {
+			BUS_QUERY_ID_TYPE IdType;
+		} QueryId;
 
 		struct {
 			PCM_RESOURCE_LIST AllocatedResources;
@@ -571,8 +648,51 @@ NTKERNELAPI NTSTATUS IoCreateDevice(
 	BOOLEAN Exclusive,
 	PDEVICE_OBJECT* DeviceObject);
 
+#define IoSizeOfIrp(StackSize) \
+	(USHORT) (sizeof(IRP) + (StackSize) * sizeof(IO_STACK_LOCATION))
+
 FORCEINLINE PIO_STACK_LOCATION IoGetCurrentIrpStackLocation(PIRP Irp) {
 	return Irp->Tail.Overlay.CurrentStackLocation;
+}
+
+FORCEINLINE void IoSkipCurrentIrpStackLocation(PIRP Irp) {
+	++Irp->CurrentLocation;
+	++Irp->Tail.Overlay.CurrentStackLocation;
+}
+
+FORCEINLINE PIO_STACK_LOCATION IoGetNextIrpStackLocation(PIRP Irp) {
+	return Irp->Tail.Overlay.CurrentStackLocation - 1;
+}
+
+FORCEINLINE void IoSetNextIrpStackLocation(PIRP Irp) {
+	--Irp->CurrentLocation;
+	--Irp->Tail.Overlay.CurrentStackLocation;
+}
+
+FORCEINLINE void IoMarkIrpPending(PIRP Irp) {
+	IoGetCurrentIrpStackLocation(Irp)->Control |= SL_PENDING_RETURNED;
+}
+
+FORCEINLINE void IoSetCompletionRoutine(
+	PIRP Irp,
+	PIO_COMPLETION_ROUTINE CompletionRoutine,
+	PVOID Context,
+	BOOLEAN InvokeOnSuccess,
+	BOOLEAN InvokeOnError,
+	BOOLEAN InvokeOnCancel) {
+	PIO_STACK_LOCATION slot = IoGetNextIrpStackLocation(Irp);
+	slot->CompletionRoutine = CompletionRoutine;
+	slot->Context = Context;
+	slot->Control = 0;
+	if (InvokeOnSuccess) {
+		slot->Control = SL_INVOKE_ON_SUCCESS;
+	}
+	if (InvokeOnError) {
+		slot->Control |= SL_INVOKE_ON_ERROR;
+	}
+	if (InvokeOnCancel) {
+		slot->Control |= SL_INVOKE_ON_CANCEL;
+	}
 }
 
 #define IO_NO_INCREMENT 0
@@ -583,8 +703,14 @@ FORCEINLINE PIO_STACK_LOCATION IoGetCurrentIrpStackLocation(PIRP Irp) {
 #define IO_MOUSE_INCREMENT 6
 #define IO_SOUND_INCREMENT 8
 
+NTKERNELAPI PIRP IoAllocateIrp(CCHAR StackSize, BOOLEAN ChargeQuota);
+NTKERNELAPI void IoFreeIrp(PIRP Irp);
+NTKERNELAPI void IoInitializeIrp(PIRP Irp, USHORT PacketSize, CCHAR StackSize);
+
+NTKERNELAPI NTSTATUS IofCallDriver(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 NTKERNELAPI void IofCompleteRequest(PIRP Irp, CCHAR PriorityBoost);
 
+#define IoCallDriver(DeviceObject, Irp) IofCallDriver(DeviceObject, Irp)
 #define IoCompleteRequest(Irp, PriorityBoost) IofCompleteRequest(Irp, PriorityBoost)
 
 typedef enum _SYSTEM_INFORMATION_CLASS {
@@ -596,6 +722,18 @@ NTKERNELAPI NTSTATUS ZwQuerySystemInformation(
 	PVOID SystemInformation,
 	ULONG SystemInformationLength,
 	PULONG ReturnLength);
+
+typedef LONG KPRIORITY;
+
+typedef enum {
+	NotificationEvent,
+	SynchronizationEvent
+} EVENT_TYPE;
+
+NTKERNELAPI void KeInitializeEvent(PKEVENT Event, EVENT_TYPE Type, BOOLEAN State);
+NTKERNELAPI LONG KeSetEvent(PKEVENT Event, KPRIORITY Increment, BOOLEAN Wait);
+NTKERNELAPI void KeClearEvent(PKEVENT Event);
+NTKERNELAPI LONG KeResetEvent(PKEVENT Event);
 
 #ifdef __cplusplus
 }

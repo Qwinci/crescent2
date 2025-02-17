@@ -5,6 +5,7 @@
 struct Process;
 
 struct LoadedPe {
+	usize base;
 	usize entry;
 };
 

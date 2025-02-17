@@ -407,22 +407,25 @@ hz::result<LoadedPe, int> pe_load(Process* process, std::shared_ptr<VNode>& file
 		}
 	}
 
-	if (import_dir.size) {
+	if (!user && import_dir.size) {
 		auto* imports = offset(mapping.data(), ImportEntry*, import_dir.virt_addr);
 		for (; imports->import_lookup_table_rva; ++imports) {
 			auto* lib_name = static_cast<const char*>(mapping.data()) + imports->name_rva;
-			println(lib_name);
 
 			u64* entry = offset(mapping.data(), u64*, imports->iat_rva);
 			for (; *entry; ++entry) {
 				if (*entry & IMAGE_ORDINAL_FLAG_64) {
 					u16 ordinal = *entry;
-					panic("import by ordinal ", ordinal);
+					panic("[kernel][pe]: unresolved import by ordinal ", ordinal);
 				}
 				else {
 					auto* name = static_cast<const char*>(mapping.data()) + (*entry & 0xFFFFFFFF) + 2;
-					println(name);
-					*entry = reinterpret_cast<usize>(resolve_name(name));
+					auto resolved = resolve_name(name);
+					if (!resolved) {
+						panic("[kernel][pe]: unresolved import '", name, "'");
+					}
+
+					*entry = reinterpret_cast<usize>(resolved);
 				}
 			}
 		}
@@ -459,6 +462,7 @@ hz::result<LoadedPe, int> pe_load(Process* process, std::shared_ptr<VNode>& file
 	mapping.ptr = nullptr;
 
 	return hz::success(LoadedPe {
+		.base = load_base,
 		.entry = load_base + common_hdr.opt.addr_of_entry
 	});
 }

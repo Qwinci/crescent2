@@ -48,6 +48,12 @@ SECTIONS {
 		*(.data .data.*)
 	} :data
 
+	.drivers : {
+		HIDDEN(DRIVERS_START = .);
+		KEEP(*(.drivers))
+		HIDDEN(DRIVERS_END = .);
+	} :data
+
 	.dynamic : {
 		*(.dynamic)
 	} :data :dynamic

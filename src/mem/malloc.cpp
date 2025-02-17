@@ -191,7 +191,7 @@ extern "C" EXPORT PVOID ExAllocatePool2(POOL_FLAGS flags, SIZE_T num_of_bytes, U
 	return &ptr[2];
 }
 
-extern "C" EXPORT void ExFreePool(PVOID ptr) {
+EXPORT void ExFreePool(PVOID ptr) {
 	auto* p = static_cast<usize*>(ptr);
 	auto size = *(p - 2);
 	kfree(p - 2, size);

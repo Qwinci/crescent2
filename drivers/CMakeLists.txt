@@ -11,7 +11,13 @@ macro(DRIVER NAME)
 		-fno-exceptions -fno-rtti
 		--target=${TARGET}
 	)
-	target_include_directories(${NAME} PRIVATE "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/drivers")
+	target_include_directories(
+		${NAME}
+		PRIVATE
+		"${PROJECT_SOURCE_DIR}/include"
+		"${PROJECT_SOURCE_DIR}/drivers"
+		"${PROJECT_SOURCE_DIR}/drivers/crt"
+	)
 	target_link_options(${NAME} PRIVATE
 		--target=${TARGET}
 		-nostdlib

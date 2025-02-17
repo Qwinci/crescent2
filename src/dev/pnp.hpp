@@ -30,6 +30,8 @@ struct KDEVICE_QUEUE {
 #endif
 };
 
+#define DO_EXCLUSIVE 8
+
 struct [[gnu::aligned(16)]] DEVICE_OBJECT {
 	i16 type;
 	u16 size;
@@ -82,7 +84,14 @@ struct DEVOBJ_EXTENSION {
 	void* verifier_ctx;
 };
 
-struct DRIVER_EXTENSION;
+using PDRIVER_ADD_DEVICE = NTSTATUS (*)(DRIVER_OBJECT* driver, DEVICE_OBJECT* physical_device);
+
+struct DRIVER_EXTENSION {
+	DRIVER_OBJECT* driver;
+	PDRIVER_ADD_DEVICE add_device;
+	ULONG count;
+	UNICODE_STRING service_key_name;
+};
 
 using PDRIVER_INITIALIZE = NTSTATUS (*)(DRIVER_OBJECT* driver, UNICODE_STRING* registry_path);
 using PDRIVER_STARTIO = void (*)(DEVICE_OBJECT* device, IRP* irp);
@@ -90,18 +99,34 @@ using PDRIVER_UNLOAD = void (*)(DRIVER_OBJECT* driver);
 using PDRIVER_DISPATCH = NTSTATUS (*)(DEVICE_OBJECT* device, IRP* irp);
 using PDRIVER_CANCEL = void (*)(DEVICE_OBJECT* device, IRP* irp);
 
+#define IRP_MJ_READ 3
+#define IRP_MJ_WRITE 4
+#define IRP_MJ_FLUSH_BUFFERS 9
 #define IRP_MJ_DEVICE_CONTROL 0xE
 #define IRP_MJ_INTERNAL_DEVICE_CONTROL 0xF
+#define IRP_MJ_SHUTDOWN 0x10
 #define IRP_MJ_SYSTEM_CONTROL 0x17
 #define IRP_MJ_PNP 0x1B
 #define IRP_MJ_MAXIMUM_FUNCTION 0x1B
 
 // pnp minor functions
 #define IRP_MN_START_DEVICE 0
+#define IRP_MN_QUERY_REMOVE_DEVICE 1
 #define IRP_MN_REMOVE_DEVICE 2
+#define IRP_MN_CANCEL_REMOVE_DEVICE 3
 #define IRP_MN_STOP_DEVICE 4
-#define IRP_MN_READ_CONFIG 0xF
-#define IRP_MN_WRITE_CONFIG 0x10
+#define IRP_MN_QUERY_STOP_DEVICE 5
+#define IRP_MN_CANCEL_STOP_DEVICE 6
+
+// bus
+#define IRP_MN_QUERY_DEVICE_RELATIONS 7
+#define IRP_MN_QUERY_INTERFACE 8
+#define IRP_MN_QUERY_CAPABILITIES 9
+#define IRP_MN_QUERY_RESOURCES 10
+#define IRP_MN_QUERY_RESOURCE_REQUIREMENTS 11
+#define IRP_MN_QUERY_DEVICE_TEXT 12
+#define IRP_MN_FILTER_RESOURCE_REQUIREMENTS 13
+#define IRP_MN_QUERY_ID 19
 
 struct DRIVER_OBJECT {
 	i16 type;
@@ -151,6 +176,12 @@ struct IO_STATUS_BLOCK {
 
 using PIO_APC_ROUTINE = void (*)(void* apc_context, IO_STATUS_BLOCK* io_status_block, u32 reserved);
 using PIO_COMPLETION_ROUTINE = NTSTATUS (*)(DEVICE_OBJECT* device, IRP* irp, void* ctx);
+
+#define SL_PENDING_RETURNED 1
+#define SL_ERROR_RETURNED 2
+#define SL_INVOKE_ON_CANCEL 0x20
+#define SL_INVOKE_ON_SUCCESS 0x40
+#define SL_INVOKE_ON_ERROR 0x80
 
 struct KDEVICE_QUEUE_ENTRY {
 	LIST_ENTRY device_list_entry;
@@ -261,6 +292,30 @@ struct CM_RESOURCE_LIST {
 	CM_FULL_RESOURCE_DESCRIPTOR list[];
 };
 
+enum class DEVICE_RELATION_TYPE {
+	Bus,
+	Ejection,
+	Power,
+	Removal,
+	TargetDevice,
+	SingleBus,
+	Transport
+};
+
+enum class BUS_QUERY_ID_TYPE {
+	DeviceId = 0,
+	HardwareIds = 1,
+	CompatibleIds = 2,
+	InstanceId = 3,
+	DeviceSerialNumber = 4,
+	ContainerId = 5
+};
+
+struct DEVICE_RELATIONS {
+	ULONG count;
+	DEVICE_OBJECT* objects[];
+};
+
 struct IO_STACK_LOCATION {
 	u8 major_function;
 	u8 minor_function;
@@ -300,6 +355,16 @@ struct IO_STACK_LOCATION {
 			void* type3_input_buffer;
 		} device_io_control;
 
+		// QueryDeviceRelations
+		struct {
+			DEVICE_RELATION_TYPE type;
+		} query_device_relations;
+
+		// QueryId
+		struct {
+			BUS_QUERY_ID_TYPE id_type;
+		} query_id;
+
 		// StartDevice
 		struct {
 			CM_RESOURCE_LIST* allocated_resources;
@@ -324,7 +389,7 @@ struct IRP {
 		// if this is main irp, contains the number of associated irps that must complete
 		// before the main irp can complete
 		volatile i32 irp_count;
-		// if operating is buffered this is the address of the system space buffer
+		// if operation is buffered this is the address of the system space buffer
 		void* system_buffer;
 	} associated_irp;
 	// used for queueing the irp to the thread's pending io request packet list
@@ -343,7 +408,7 @@ struct IRP {
 	i8 apc_environment;
 	u8 allocation_flags;
 	union {
-		IO_STATUS_BLOCK user_iosb;
+		IO_STATUS_BLOCK* user_iosb;
 		void* io_ring_context;
 	};
 	KEVENT* user_event;
@@ -386,6 +451,54 @@ struct IRP {
 	} tail;
 };
 
+inline IO_STACK_LOCATION* IoGetCurrentIrpStackLocation(IRP* irp) {
+	return irp->tail.overlay.current_stack_location;
+}
+
+inline void IoSkipCurrentIrpStackLocation(IRP* irp) {
+	++irp->current_location;
+	++irp->tail.overlay.current_stack_location;
+}
+
+inline IO_STACK_LOCATION* IoGetNextIrpStackLocation(IRP* irp) {
+	return irp->tail.overlay.current_stack_location - 1;
+}
+
+inline void IoSetNextIrpStackLocation(IRP* irp) {
+	--irp->current_location;
+	--irp->tail.overlay.current_stack_location;
+}
+
+inline void IoMarkIrpPending(IRP* irp) {
+	IoGetCurrentIrpStackLocation(irp)->control |= SL_PENDING_RETURNED;
+}
+
+inline USHORT IoSizeOfIrp(CCHAR stack_size) {
+	return sizeof(IRP) + stack_size * sizeof(IO_STACK_LOCATION);
+}
+
+inline void IoSetCompletionRoutine(
+	IRP* irp,
+	PIO_COMPLETION_ROUTINE completion_routine,
+	PVOID ctx,
+	BOOLEAN invoke_on_success,
+	BOOLEAN invoke_on_error,
+	BOOLEAN invoke_on_cancel) {
+	IO_STACK_LOCATION* slot = IoGetNextIrpStackLocation(irp);
+	slot->completion_routine = completion_routine;
+	slot->ctx = ctx;
+	slot->control = 0;
+	if (invoke_on_success) {
+		slot->control = SL_INVOKE_ON_SUCCESS;
+	}
+	if (invoke_on_error) {
+		slot->control |= SL_INVOKE_ON_ERROR;
+	}
+	if (invoke_on_cancel) {
+		slot->control |= SL_INVOKE_ON_CANCEL;
+	}
+}
+
 extern "C" NTSTATUS IoCreateDevice(
 	DRIVER_OBJECT* driver,
 	ULONG device_ext_size,
@@ -393,6 +506,22 @@ extern "C" NTSTATUS IoCreateDevice(
 	DEVICE_TYPE type,
 	ULONG characteristics,
 	BOOLEAN exclusive,
-	DEVICE_OBJECT* device);
+	DEVICE_OBJECT** device);
 
+extern "C" IRP* IoAllocateIrp(CCHAR stack_size, BOOLEAN charge_quota);
+extern "C" void IoFreeIrp(IRP* irp);
+extern "C" void IoInitializeIrp(IRP* irp, USHORT packet_size, CCHAR stack_size);
+
+extern "C" IRP* IoBuildSynchronousFsdRequest(
+	ULONG major_function,
+	DEVICE_OBJECT* device,
+	PVOID buffer,
+	ULONG length,
+	LARGE_INTEGER* starting_offset,
+	KEVENT* event,
+	IO_STATUS_BLOCK* io_status_block);
+
+extern "C" NTSTATUS IofCallDriver(DEVICE_OBJECT* device, IRP* irp);
 extern "C" void IofCompleteRequest(IRP* irp, CCHAR priority_boost);
+
+void enumerate_bus(DEVICE_OBJECT* device);

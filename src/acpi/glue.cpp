@@ -147,7 +147,7 @@ void uacpi_kernel_free(void* mem, uacpi_size size_hint) {
 }
 
 void uacpi_kernel_log(uacpi_log_level, const uacpi_char* msg) {
-	println("uACPI: ", msg);
+	print("uACPI: ", msg);
 }
 
 uacpi_u64 uacpi_kernel_get_nanoseconds_since_boot() {
