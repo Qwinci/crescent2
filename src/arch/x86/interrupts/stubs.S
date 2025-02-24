@@ -203,10 +203,8 @@ stub %i arch_irq_handler
 .endm
 
 .section .data
-.global X86_IRQ_STUBS
-.hidden X86_IRQ_STUBS
-.global X86_EXC_STUBS
-.hidden X86_EXC_STUBS
+.globl X86_IRQ_STUBS
+.globl X86_EXC_STUBS
 .align 16
 X86_EXC_STUBS:
 .set i, 0

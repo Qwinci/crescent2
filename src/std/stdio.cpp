@@ -1,4 +1,3 @@
-#include "utils/export.hpp"
 #include "ntdef.h"
 #include "cstring.hpp"
 #include "stdio.hpp"
@@ -11,7 +10,7 @@ static bool is_digit(WCHAR c) {
 	return c >= u'0' && c <= u'9';
 }
 
-extern "C" EXPORT int vswprintf(WCHAR* buffer, size_t buffer_size, const WCHAR* fmt, va_list ap) {
+NTAPI extern "C" int vswprintf(WCHAR* buffer, size_t buffer_size, const WCHAR* fmt, va_list ap) {
 	size_t written = 0;
 
 	auto write = [&](const WCHAR* ptr, size_t size) {
@@ -147,7 +146,7 @@ extern "C" EXPORT int vswprintf(WCHAR* buffer, size_t buffer_size, const WCHAR* 
 	}
 }
 
-extern "C" EXPORT int swprintf(WCHAR* buffer, size_t buffer_size, const WCHAR* fmt, ...) {
+NTAPI extern "C" int swprintf(WCHAR* buffer, size_t buffer_size, const WCHAR* fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
 	int ret = vswprintf(buffer, buffer_size, fmt, ap);
@@ -155,7 +154,7 @@ extern "C" EXPORT int swprintf(WCHAR* buffer, size_t buffer_size, const WCHAR* f
 	return ret;
 }
 
-extern "C" EXPORT ULONG DbgPrintEx(ULONG component_id, ULONG level, PCSTR format, ...) {
+NTAPI extern "C" ULONG DbgPrintEx(ULONG component_id, ULONG level, PCSTR format, ...) {
 	print(format);
 	return 0;
 }

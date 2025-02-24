@@ -9,7 +9,6 @@ set(COMMON_SRC
 add_library(common_elf STATIC ${COMMON_SRC})
 target_compile_options(common_elf PRIVATE
 	${COMMON_CXXFLAGS}
-	--target=${ARCH}-unknown-windows-elf
 )
 target_include_directories(common_elf PUBLIC .)
 target_link_libraries(common_elf PRIVATE hzutils)

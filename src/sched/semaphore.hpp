@@ -8,5 +8,5 @@ struct KSEMAPHORE {
 
 using KPRIORITY = i32;
 
-extern "C" void KeInitializeSemaphore(KSEMAPHORE* semaphore, i32 count, i32 limit);
-extern "C" i32 KeReleaseSemaphore(KSEMAPHORE* semaphore, KPRIORITY increment, i32 adjustment, bool wait);
+NTAPI extern "C" void KeInitializeSemaphore(KSEMAPHORE* semaphore, i32 count, i32 limit);
+NTAPI extern "C" i32 KeReleaseSemaphore(KSEMAPHORE* semaphore, KPRIORITY increment, i32 adjustment, bool wait);

@@ -30,7 +30,7 @@ enum class KWAIT_REASON {
 
 void dispatch_header_queue_one_waiter(DISPATCHER_HEADER* header) REQUIRES(header);
 void dispatch_header_queue_all_waiters(DISPATCHER_HEADER* header) REQUIRES(header);
-extern "C" NTSTATUS KeWaitForMultipleObjects(
+NTAPI extern "C" NTSTATUS KeWaitForMultipleObjects(
 	u32 count,
 	void* objects[],
 	WaitType type,
@@ -39,7 +39,7 @@ extern "C" NTSTATUS KeWaitForMultipleObjects(
 	bool alertable,
 	i64* timeout,
 	KWAIT_BLOCK* wait_block_array);
-extern "C" NTSTATUS KeWaitForSingleObject(
+NTAPI extern "C" NTSTATUS KeWaitForSingleObject(
 	void* object,
 	KWAIT_REASON wait_reason,
 	KPROCESSOR_MODE wait_mode,

@@ -27,8 +27,8 @@ static void set_idt_entry(u8 i, void* handler, u8 selector, u8 ist, u8 dpl) {
 	entry.ist_flags = (ist & 0b111) | (0xE << 8) | (dpl & 0b11) << 13 | 1 << 15;
 }
 
-extern void* X86_IRQ_STUBS[];
-extern void* X86_EXC_STUBS[];
+extern "C" void* X86_IRQ_STUBS[];
+extern "C" void* X86_EXC_STUBS[];
 
 void x86_init_idt() {
 	for (u32 i = 0; i < 32; ++i) {

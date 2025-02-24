@@ -1,5 +1,4 @@
 #include "ntdef.h"
-#include "utils/export.hpp"
 #include "stdio.hpp"
 #include "acpi.hpp"
 #include "cstring.hpp"
@@ -22,7 +21,7 @@ struct SYSTEM_FIRMWARE_TABLE_INFORMATION {
 	CHAR TableBuffer[];
 };
 
-extern "C" EXPORT NTSTATUS ZwQuerySystemInformation(
+NTAPI extern "C" NTSTATUS ZwQuerySystemInformation(
 	SYSTEM_INFORMATION_CLASS clazz,
 	PVOID info,
 	ULONG info_len,
@@ -58,6 +57,6 @@ extern "C" EXPORT NTSTATUS ZwQuerySystemInformation(
 		}
 	}
 	else {
-		return STATUS_INVALID_PARAMETER;
+		panic("ZwQuerySysteminformation: unsupported class ", static_cast<int>(clazz));
 	}
 }

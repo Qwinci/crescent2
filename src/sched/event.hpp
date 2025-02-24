@@ -12,7 +12,7 @@ enum class EVENT_TYPE {
 	Synchronization
 };
 
-extern "C" void KeInitializeEvent(KEVENT* event, EVENT_TYPE type, BOOLEAN state);
-extern "C" LONG KeSetEvent(KEVENT* event, KPRIORITY increment, BOOLEAN wait);
-extern "C" void KeClearEvent(KEVENT* event);
-extern "C" LONG KeResetEvent(KEVENT* event);
+NTAPI extern "C" void KeInitializeEvent(KEVENT* event, EVENT_TYPE type, BOOLEAN state);
+NTAPI extern "C" LONG KeSetEvent(KEVENT* event, KPRIORITY increment, BOOLEAN wait);
+NTAPI extern "C" void KeClearEvent(KEVENT* event);
+NTAPI extern "C" LONG KeResetEvent(KEVENT* event);

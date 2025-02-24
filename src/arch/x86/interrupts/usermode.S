@@ -1,6 +1,7 @@
 .globl x86_syscall_stub
-.hidden x86_syscall_stub
-.type x86_syscall_stub, @function
+.def x86_syscall_stub
+.type 32
+.endef
 
 // num == rax
 // a0 == rdx
@@ -74,4 +75,4 @@ x86_syscall_stub:
 	swapgs
 	sysretq
 
-.section .note.GNU-stack
+.section ".note.GNU-stack"

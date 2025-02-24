@@ -3,7 +3,6 @@
 #include "mem/mem.hpp"
 #include "assert.hpp"
 #include "ntdef.h"
-#include "utils/export.hpp"
 #include <hz/array.hpp>
 #include <hz/spinlock.hpp>
 
@@ -140,11 +139,6 @@ void operator delete[](void* ptr, size_t size) {
 	kfree(ptr, size);
 }
 
-asm(".hidden _Znwy");
-asm(".hidden _ZdlPvy");
-asm(".hidden _Znay");
-asm(".hidden _ZdaPvy");
-
 void* kmalloc(usize size) {
 	if (!size) {
 		return nullptr;
@@ -179,9 +173,7 @@ void kfree(void* ptr, usize size) {
 	KERNEL_VSPACE.free_backed(ptr, size);
 }
 
-using POOL_FLAGS = ULONG;
-
-extern "C" EXPORT PVOID ExAllocatePool2(POOL_FLAGS flags, SIZE_T num_of_bytes, ULONG tag) {
+NTAPI void* ExAllocatePool2(POOL_FLAGS flags, size_t num_of_bytes, ULONG tag) {
 	auto* ptr = static_cast<usize*>(kmalloc(num_of_bytes + sizeof(usize) * 2));
 	assert(reinterpret_cast<usize>(ptr) % 16 == 0);
 	if (!ptr) {
@@ -191,7 +183,7 @@ extern "C" EXPORT PVOID ExAllocatePool2(POOL_FLAGS flags, SIZE_T num_of_bytes, U
 	return &ptr[2];
 }
 
-EXPORT void ExFreePool(PVOID ptr) {
+NTAPI void ExFreePool(void* ptr) {
 	auto* p = static_cast<usize*>(ptr);
 	auto size = *(p - 2);
 	kfree(p - 2, size);

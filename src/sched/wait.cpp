@@ -1,6 +1,5 @@
 #include "wait.hpp"
 #include "arch/cpu.hpp"
-#include "utils/export.hpp"
 #include "assert.hpp"
 #include <hz/container_of.hpp>
 
@@ -34,7 +33,7 @@ void dispatch_header_queue_all_waiters(DISPATCHER_HEADER* header) {
 
 static constexpr usize THREAD_WAIT_OBJECTS = 3;
 
-EXPORT NTSTATUS KeWaitForMultipleObjects(
+NTSTATUS KeWaitForMultipleObjects(
 	u32 count,
 	void* objects[],
 	WaitType type,
@@ -186,7 +185,7 @@ EXPORT NTSTATUS KeWaitForMultipleObjects(
 	return status;
 }
 
-EXPORT NTSTATUS KeWaitForSingleObject(
+NTSTATUS KeWaitForSingleObject(
 	void* object,
 	KWAIT_REASON wait_reason,
 	KPROCESSOR_MODE wait_mode,

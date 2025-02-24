@@ -1,7 +1,6 @@
 #include "queued_spinlock.hpp"
-#include "export.hpp"
 
-EXPORT void KeAcquireInStackQueuedSpinLock(KSPIN_LOCK* lock, KLOCK_QUEUE_HANDLE* lock_handle) {
+void KeAcquireInStackQueuedSpinLock(KSPIN_LOCK* lock, KLOCK_QUEUE_HANDLE* lock_handle) {
 	lock_handle->lock_queue.next.store(nullptr, hz::memory_order::relaxed);
 	lock_handle->lock_queue.lock = lock;
 	lock_handle->old_irql = KfRaiseIrql(DISPATCH_LEVEL);
@@ -35,7 +34,7 @@ EXPORT void KeAcquireInStackQueuedSpinLock(KSPIN_LOCK* lock, KLOCK_QUEUE_HANDLE*
 	}
 }
 
-EXPORT void KeReleaseInStackQueuedSpinLock(KLOCK_QUEUE_HANDLE* lock_handle) {
+void KeReleaseInStackQueuedSpinLock(KLOCK_QUEUE_HANDLE* lock_handle) {
 	auto next = lock_handle->lock_queue.next.load(hz::memory_order::relaxed);
 	if (next) {
 		auto value = next->lock->value.load(hz::memory_order::relaxed);

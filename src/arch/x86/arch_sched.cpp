@@ -8,8 +8,9 @@
 asm(R"(
 .pushsection .text
 .globl sched_switch_thread
-.hidden sched_switch_thread
-.type sched_switch_thread, @function
+.def sched_switch_thread
+.type 32
+.endef
 
 // void sched_switch_thread(ArchThread* prev, ArchThread* next)
 sched_switch_thread:

@@ -9,7 +9,12 @@ set(CMAKE_SHARED_LIBRARY_SUFFIX .dll)
 set(CMAKE_STATIC_LIBRARY_PREFIX "")
 set(CMAKE_STATIC_LIBRARY_SUFFIX .lib)
 set(CMAKE_SKIP_RPATH ON)
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+#set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+set(CMAKE_CXX_STANDARD_LIBRARIES "")
+set(CMAKE_MSVC_RUNTIME_LIBRARY "")
+set(CMAKE_C_COMPILE_OPTIONS_MSVC_DEBUG_INFORMATION_FORMAT_Embedded -g -gdwarf-4)
+set(CMAKE_ASM_COMPILE_OPTIONS_MSVC_DEBUG_INFORMATION_FORMAT_Embedded -g -gdwarf-4)
+set(CMAKE_CXX_COMPILE_OPTIONS_MSVC_DEBUG_INFORMATION_FORMAT_Embedded -g -gdwarf-4)
 
 set(COMMON_CFLAGS
 	-Wall -Wextra -Werror=switch -Werror=return-type
@@ -29,17 +34,16 @@ add_executable(crescent
 	src/main.cpp
 )
 target_include_directories(crescent PRIVATE src src/std common include)
+target_compile_definitions(crescent PRIVATE NTAPI=__declspec\(dllexport\))
 target_compile_options(crescent PRIVATE
 	$<$<COMPILE_LANGUAGE:CXX>: ${COMMON_CXXFLAGS}>
 	$<$<COMPILE_LANGUAGE:C>: ${COMMON_CFLAGS}>
-	--target=${ARCH}-unknown-windows-elf
+	$<$<COMPILE_LANGUAGE:ASM>: ${COMMON_CFLAGS}>
 	-Wthread-safety-analysis -Werror=thread-safety-analysis
 )
 target_link_options(crescent PRIVATE
 	-nostdlib
-	--target=${ARCH}-unknown-linux-gnu
-	-T ${PROJECT_SOURCE_DIR}/lds/${ARCH}.ld
-	-Wl,--export-dynamic,--hash-style=sysv
+	-Wl,/entry:_start,/base:0xFFFFFFFF80000000,/ignore:longsections
 )
 
 if(ARCH STREQUAL "x86_64")
@@ -70,6 +74,7 @@ set(QEMU_FLAGS -m 4G -M q35
 	#-serial stdio
 	-no-reboot -no-shutdown
 	-debugcon stdio
+	#-d int
 )
 
 find_program(XORRISO xorriso REQUIRED)

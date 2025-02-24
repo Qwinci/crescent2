@@ -1,10 +1,9 @@
 #include "pnp.hpp"
-#include "utils/export.hpp"
 #include "cstring.hpp"
 #include "driver.hpp"
 
-extern Driver DRIVERS_START[];
-extern Driver DRIVERS_END[];
+extern Driver DRIVERS_START;
+extern Driver DRIVERS_END;
 
 static void find_driver(DEVICE_OBJECT* device) {
 	IRP* irp = IoAllocateIrp(device->stack_size, false);
@@ -31,7 +30,7 @@ static void find_driver(DEVICE_OBJECT* device) {
 			break;
 		}
 
-		for (auto* driver = DRIVERS_START; driver != DRIVERS_END; ++driver) {
+		for (auto* driver = &DRIVERS_START + 1; driver != &DRIVERS_END; ++driver) {
 			for (auto& compatible : driver->compatibles) {
 				if (compatible == compatible_str) {
 					driver->add_device(driver->object, device);
@@ -59,7 +58,6 @@ void enumerate_bus(DEVICE_OBJECT* device) {
 	IoSetCompletionRoutine(irp, [](DEVICE_OBJECT* device, IRP* irp, void* ctx) {
 		auto* ptr = reinterpret_cast<DEVICE_RELATIONS*>(irp->io_status.info);
 
-		println("discovered ", ptr->count, " pci devices");
 		for (u32 i = 0; i < ptr->count; ++i) {
 			auto dev = ptr->objects[i];
 			find_driver(dev);
@@ -72,7 +70,7 @@ void enumerate_bus(DEVICE_OBJECT* device) {
 	IofCallDriver(device, irp);
 }
 
-EXPORT NTSTATUS IoCreateDevice(
+NTSTATUS IoCreateDevice(
 	DRIVER_OBJECT* driver,
 	ULONG device_ext_size,
 	PUNICODE_STRING device_name,
@@ -101,7 +99,7 @@ EXPORT NTSTATUS IoCreateDevice(
 	return STATUS_SUCCESS;
 }
 
-EXPORT IRP* IoAllocateIrp(CCHAR stack_size, BOOLEAN charge_quota) {
+IRP* IoAllocateIrp(CCHAR stack_size, BOOLEAN charge_quota) {
 	IRP* irp = static_cast<IRP*>(kmalloc(IoSizeOfIrp(stack_size)));
 	if (!irp) {
 		return nullptr;
@@ -110,11 +108,11 @@ EXPORT IRP* IoAllocateIrp(CCHAR stack_size, BOOLEAN charge_quota) {
 	return irp;
 }
 
-EXPORT void IoFreeIrp(IRP* irp) {
+void IoFreeIrp(IRP* irp) {
 	kfree(irp, IoSizeOfIrp(irp->stack_count));
 }
 
-EXPORT void IoInitializeIrp(IRP* irp, USHORT packet_size, CCHAR stack_size) {
+void IoInitializeIrp(IRP* irp, USHORT packet_size, CCHAR stack_size) {
 	memset(irp, 0, packet_size);
 	irp->size = packet_size;
 	irp->stack_count = stack_size;
@@ -122,7 +120,7 @@ EXPORT void IoInitializeIrp(IRP* irp, USHORT packet_size, CCHAR stack_size) {
 	irp->tail.overlay.current_stack_location = reinterpret_cast<IO_STACK_LOCATION*>(&irp[1]);
 }
 
-EXPORT IRP* IoBuildSynchronousFsdRequest(
+IRP* IoBuildSynchronousFsdRequest(
 	ULONG major_function,
 	DEVICE_OBJECT* device,
 	PVOID buffer,
@@ -159,7 +157,7 @@ EXPORT IRP* IoBuildSynchronousFsdRequest(
 	return irp;
 }
 
-EXPORT NTSTATUS IofCallDriver(DEVICE_OBJECT* device, IRP* irp) {
+NTSTATUS IofCallDriver(DEVICE_OBJECT* device, IRP* irp) {
 	// mark the next lower location as the current
 	IoSetNextIrpStackLocation(irp);
 
@@ -172,7 +170,7 @@ EXPORT NTSTATUS IofCallDriver(DEVICE_OBJECT* device, IRP* irp) {
 	return status;
 }
 
-EXPORT void IofCompleteRequest(IRP* irp, CCHAR priority_boost) {
+void IofCompleteRequest(IRP* irp, CCHAR priority_boost) {
 	auto slot = IoGetCurrentIrpStackLocation(irp);
 	for (; irp->current_location < irp->stack_count; ++slot) {
 		if (slot->control & SL_PENDING_RETURNED) {

@@ -8,14 +8,13 @@ macro(APP NAME)
 	add_executable(${NAME} ${ARGN})
 	target_compile_options(${NAME} PRIVATE
 		-Wall -Wextra
-		--target=${TARGET}
 	)
 	target_include_directories(${NAME} PRIVATE "${PROJECT_SOURCE_DIR}/include")
 	target_link_options(${NAME} PRIVATE
-		--target=${TARGET}
 		-L "${CMAKE_BINARY_DIR}/sysroot/libs"
+		-Wl,/ignore:longsections
 	)
-	target_link_libraries(${NAME} PRIVATE kernel32.lib)
+	target_link_libraries(${NAME} PRIVATE libcmt kernel32.lib)
 	add_dependencies(${NAME} libcmt oldnames kernel32)
 	add_custom_command(TARGET ${NAME}
 		POST_BUILD

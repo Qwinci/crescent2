@@ -13,7 +13,7 @@ namespace {
 	hz::atomic<u32> NUM_CPUS {1};
 	hz::spinlock<void> SMP_LOCK;
 
-	[[gnu::section(".limine_requests")]] volatile limine_smp_request SMP_REQUEST {
+	[[gnu::section(".limine_requests$b")]] volatile limine_smp_request SMP_REQUEST {
 		.id = LIMINE_SMP_REQUEST,
 		.revision = 0,
 		.response = nullptr,

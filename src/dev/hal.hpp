@@ -16,14 +16,14 @@ struct PCI_SLOT_NUMBER {
 	} u;
 };
 
-extern "C" u32 HalGetBusDataByOffset(
+NTAPI extern "C" u32 HalGetBusDataByOffset(
 	BUS_DATA_TYPE type,
 	u32 bus_number,
 	u32 slot_number,
 	void* buffer,
 	u32 offset,
 	u32 length);
-extern "C" u32 HalSetBusDataByOffset(
+NTAPI extern "C" u32 HalSetBusDataByOffset(
 	BUS_DATA_TYPE type,
 	u32 bus_number,
 	u32 slot_number,

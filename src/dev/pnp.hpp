@@ -499,7 +499,7 @@ inline void IoSetCompletionRoutine(
 	}
 }
 
-extern "C" NTSTATUS IoCreateDevice(
+NTAPI extern "C" NTSTATUS IoCreateDevice(
 	DRIVER_OBJECT* driver,
 	ULONG device_ext_size,
 	PUNICODE_STRING device_name,
@@ -508,11 +508,11 @@ extern "C" NTSTATUS IoCreateDevice(
 	BOOLEAN exclusive,
 	DEVICE_OBJECT** device);
 
-extern "C" IRP* IoAllocateIrp(CCHAR stack_size, BOOLEAN charge_quota);
-extern "C" void IoFreeIrp(IRP* irp);
-extern "C" void IoInitializeIrp(IRP* irp, USHORT packet_size, CCHAR stack_size);
+NTAPI extern "C" IRP* IoAllocateIrp(CCHAR stack_size, BOOLEAN charge_quota);
+NTAPI extern "C" void IoFreeIrp(IRP* irp);
+NTAPI extern "C" void IoInitializeIrp(IRP* irp, USHORT packet_size, CCHAR stack_size);
 
-extern "C" IRP* IoBuildSynchronousFsdRequest(
+NTAPI extern "C" IRP* IoBuildSynchronousFsdRequest(
 	ULONG major_function,
 	DEVICE_OBJECT* device,
 	PVOID buffer,
@@ -521,7 +521,7 @@ extern "C" IRP* IoBuildSynchronousFsdRequest(
 	KEVENT* event,
 	IO_STATUS_BLOCK* io_status_block);
 
-extern "C" NTSTATUS IofCallDriver(DEVICE_OBJECT* device, IRP* irp);
-extern "C" void IofCompleteRequest(IRP* irp, CCHAR priority_boost);
+NTAPI extern "C" NTSTATUS IofCallDriver(DEVICE_OBJECT* device, IRP* irp);
+NTAPI extern "C" void IofCompleteRequest(IRP* irp, CCHAR priority_boost);
 
 void enumerate_bus(DEVICE_OBJECT* device);

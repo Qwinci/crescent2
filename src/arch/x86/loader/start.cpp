@@ -9,46 +9,51 @@
 #include "mem/early_pmalloc.hpp"
 #include "sched/process.hpp"
 #include "arch/cpu.hpp"
+#include "exe/pe_headers.hpp"
 #include <hz/optional.hpp>
 #include <hz/algorithm.hpp>
 #include <hz/pair.hpp>
 
+#pragma section(".limine_requests$a", write)
+#pragma section(".limine_requests$b", write)
+#pragma section(".limine_requests$c", write)
+
 namespace {
-	[[gnu::section(".limine_requests_start"), gnu::used]] volatile LIMINE_REQUESTS_START_MARKER
+	[[gnu::section(".limine_requests$a"), gnu::used]] volatile LIMINE_REQUESTS_START_MARKER
 
-	[[gnu::section(".limine_requests"), gnu::used]] volatile LIMINE_BASE_REVISION(3)
+	[[gnu::section(".limine_requests$b"), gnu::used]] volatile LIMINE_BASE_REVISION(3)
 
-	[[gnu::section(".limine_requests")]] volatile limine_memmap_request MMAP_REQ {
+	[[gnu::section(".limine_requests$b")]] volatile limine_memmap_request MMAP_REQ {
 		.id = LIMINE_MEMMAP_REQUEST,
 		.revision = 0,
 		.response = nullptr
 	};
 
-	[[gnu::section(".limine_requests")]] volatile limine_framebuffer_request FB_REQ {
+	[[gnu::section(".limine_requests$b")]] volatile limine_framebuffer_request FB_REQ {
 		.id = LIMINE_FRAMEBUFFER_REQUEST,
 		.revision = 0,
 		.response = nullptr
 	};
 
-	[[gnu::section(".limine_requests")]] volatile limine_rsdp_request RSDP_REQ {
+	[[gnu::section(".limine_requests$b")]] volatile limine_rsdp_request RSDP_REQ {
 		.id = LIMINE_RSDP_REQUEST,
 		.revision = 0,
 		.response = nullptr
 	};
 
-	[[gnu::section(".limine_requests")]] volatile limine_hhdm_request HHDM_REQ {
+	[[gnu::section(".limine_requests$b")]] volatile limine_hhdm_request HHDM_REQ {
 		.id = LIMINE_HHDM_REQUEST,
 		.revision = 0,
 		.response = nullptr
 	};
 
-	[[gnu::section(".limine_requests")]] volatile limine_kernel_address_request KERNEL_ADDR_REQ {
+	[[gnu::section(".limine_requests$b")]] volatile limine_kernel_address_request KERNEL_ADDR_REQ {
 		.id = LIMINE_KERNEL_ADDRESS_REQUEST,
 		.revision = 0,
 		.response = nullptr
 	};
 
-	[[gnu::section(".limine_requests")]] volatile limine_module_request MODULE_REQ {
+	[[gnu::section(".limine_requests$b")]] volatile limine_module_request MODULE_REQ {
 		.id = LIMINE_MODULE_REQUEST,
 		.revision = 0,
 		.response = nullptr,
@@ -56,7 +61,7 @@ namespace {
 		.internal_modules = nullptr
 	};
 
-	[[gnu::section(".limine_requests_end"), gnu::used]] volatile LIMINE_REQUESTS_END_MARKER
+	[[gnu::section(".limine_requests$c"), gnu::used]] volatile LIMINE_REQUESTS_END_MARKER
 }
 
 hz::optional<hz::pair<void*, usize>> x86_get_module(kstd::string_view name) {
@@ -74,16 +79,6 @@ hz::optional<hz::pair<void*, usize>> x86_get_module(kstd::string_view name) {
 	return hz::nullopt;
 }
 
-extern char REQUESTS_START[];
-extern char REQUESTS_END[];
-extern char TEXT_START[];
-extern char TEXT_END[];
-extern char RODATA_START[];
-extern char RODATA_END[];
-extern char DATA_START[];
-extern char DATA_END[];
-extern char KERNEL_START[];
-
 static constexpr usize SIZE_2MB = 1024 * 1024 * 2;
 
 static void setup_pat() {
@@ -100,51 +95,50 @@ static void setup_pat() {
 	msrs::IA32_PAT.write(value);
 }
 
+extern "C" DosHeader __ImageBase;
+
 extern usize HHDM_START;
 
 static void setup_memory(usize max_addr) {
 	setup_pat();
 
-	const usize kernel_phys = KERNEL_ADDR_REQ.response->physical_base;
+	const auto kernel_phys = KERNEL_ADDR_REQ.response->physical_base;
+	const auto kernel_virt = reinterpret_cast<usize>(&__ImageBase);
 
-	const usize requests_size = REQUESTS_END - REQUESTS_START;
-	const usize requests_off = REQUESTS_START - KERNEL_START;
-	const usize text_size = TEXT_END - TEXT_START;
-	const usize text_off = TEXT_START - KERNEL_START;
-	const usize rodata_size = RODATA_END - RODATA_START;
-	const usize rodata_off = RODATA_START - KERNEL_START;
-	const usize data_size = DATA_END - DATA_START;
-	const usize data_off = DATA_START - KERNEL_START;
+	auto* kernel_hdr = offset(&__ImageBase, const PeHeader64*, __ImageBase.e_lfanew);
+	assert(kernel_hdr->signature == IMAGE_NT_SIGNATURE);
+	auto* sections = offset(&kernel_hdr->opt, const PeSectionHeader*, kernel_hdr->coff.size_of_opt_hdr);
 
 	auto& kernel_map = KERNEL_PROCESS->page_map;
 
-	for (usize i = requests_off; i < requests_off + requests_size; i += PAGE_SIZE) {
-		(void) kernel_map.map(
-			reinterpret_cast<u64>(KERNEL_START) + i,
-			kernel_phys + i,
-			PageFlags::Read,
-			CacheMode::WriteBack);
+	for (usize i = 0; i < ALIGNUP(kernel_hdr->opt.size_of_headers, PAGE_SIZE); i += PAGE_SIZE) {
+		(void) kernel_map.map(kernel_virt + i, kernel_phys + i, PageFlags::Read, CacheMode::WriteBack);
 	}
-	for (usize i = text_off; i < text_off + text_size; i += PAGE_SIZE) {
-		(void) kernel_map.map(
-			reinterpret_cast<u64>(KERNEL_START) + i,
-			kernel_phys + i,
-			PageFlags::Read | PageFlags::Execute,
-			CacheMode::WriteBack);
-	}
-	for (usize i = rodata_off; i < rodata_off + rodata_size; i += PAGE_SIZE) {
-		(void) kernel_map.map(
-			reinterpret_cast<u64>(KERNEL_START) + i,
-			kernel_phys + i,
-			PageFlags::Read,
-			CacheMode::WriteBack);
-	}
-	for (usize i = data_off; i < data_off + data_size; i += PAGE_SIZE) {
-		(void) kernel_map.map(
-			reinterpret_cast<u64>(KERNEL_START) + i,
-			kernel_phys + i,
-			PageFlags::Read | PageFlags::Write,
-			CacheMode::WriteBack);
+
+	for (usize i = 0; i < kernel_hdr->coff.num_of_sections; ++i) {
+		auto& section = sections[i];
+
+		auto aligned_offset = ALIGNDOWN(section.virt_addr, PAGE_SIZE);
+		usize size = ALIGNUP(section.virt_size + section.virt_addr % PAGE_SIZE, PAGE_SIZE);
+
+		PageFlags flags {};
+		if (section.characteristics & IMAGE_SCN_READ) {
+			flags |= PageFlags::Read;
+		}
+		if (section.characteristics & IMAGE_SCN_WRITE) {
+			flags |= PageFlags::Write;
+		}
+		if (section.characteristics & IMAGE_SCN_EXECUTE) {
+			flags |= PageFlags::Execute;
+		}
+
+		for (usize j = 0; j < size; j += PAGE_SIZE) {
+			(void) kernel_map.map(
+				kernel_virt + aligned_offset + j,
+				kernel_phys + aligned_offset + j,
+				flags,
+				CacheMode::WriteBack);
+		}
 	}
 
 	for (usize i = 0; i < max_addr; i += SIZE_2MB) {
@@ -194,7 +188,7 @@ extern "C" [[noreturn, gnu::used]] void early_start() {
 	KERNEL_PROCESS->page_map.fill_high_half();
 
 	max_phys_addr = ALIGNUP(max_phys_addr, SIZE_2MB);
-	KERNEL_VSPACE.init(HHDM_START + max_phys_addr, reinterpret_cast<usize>(KERNEL_START) - (HHDM_START + max_phys_addr));
+	KERNEL_VSPACE.init(HHDM_START + max_phys_addr, KERNEL_ADDR_REQ.response->virtual_base - (HHDM_START + max_phys_addr));
 
 	msrs::IA32_GSBASE.write(reinterpret_cast<u64>(&BSP_CPU_DUMMY));
 

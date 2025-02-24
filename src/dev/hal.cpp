@@ -1,11 +1,10 @@
 #include "hal.hpp"
-#include "utils/export.hpp"
 #include "pci.hpp"
 #include "assert.hpp"
 #include "cstring.hpp"
 #include <hz/algorithm.hpp>
 
-EXPORT u32 HalGetBusDataByOffset(
+u32 HalGetBusDataByOffset(
 	BUS_DATA_TYPE,
 	u32 bus_number,
 	u32 slot_number,
@@ -52,7 +51,7 @@ EXPORT u32 HalGetBusDataByOffset(
 	return 0;
 }
 
-EXPORT u32 HalSetBusDataByOffset(
+u32 HalSetBusDataByOffset(
 	BUS_DATA_TYPE,
 	u32 bus_number,
 	u32 slot_number,

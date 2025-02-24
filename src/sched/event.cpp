@@ -1,16 +1,15 @@
 #include "event.hpp"
-#include "utils/export.hpp"
 #include "arch/irql.hpp"
 #include "wait.hpp"
 
-EXPORT void KeInitializeEvent(KEVENT* event, EVENT_TYPE type, BOOLEAN state) {
+void KeInitializeEvent(KEVENT* event, EVENT_TYPE type, BOOLEAN state) {
 	event->header.type = static_cast<u8>(type);
 	event->header.reserved.store(0, hz::memory_order::relaxed);
 	event->header.signal_state = state;
 	InitializeListHead(&event->header.wait_list_head);
 }
 
-EXPORT LONG KeSetEvent(KEVENT* event, KPRIORITY increment, BOOLEAN wait) {
+LONG KeSetEvent(KEVENT* event, KPRIORITY increment, BOOLEAN wait) {
 	int old_state;
 	if (event->header.type == static_cast<u8>(EVENT_TYPE::Synchronization)) {
 		old_state = reinterpret_cast<hz::atomic<i32>*>(
@@ -41,12 +40,12 @@ EXPORT LONG KeSetEvent(KEVENT* event, KPRIORITY increment, BOOLEAN wait) {
 	return 0;
 }
 
-EXPORT void KeClearEvent(KEVENT* event) {
+void KeClearEvent(KEVENT* event) {
 	reinterpret_cast<hz::atomic<i32>*>(
 		&event->header.signal_state)->store(0, hz::memory_order::acquire);
 }
 
-EXPORT LONG KeResetEvent(KEVENT* event) {
+LONG KeResetEvent(KEVENT* event) {
 	return reinterpret_cast<hz::atomic<i32>*>(
 		&event->header.signal_state)->exchange(0, hz::memory_order::acquire);
 }

@@ -1,12 +1,10 @@
-.local STACK
-.comm STACK, 0x8000, 16
-
-.cfi_sections .debug_frame
+.lcomm STACK, 0x8000, 16
 
 .section .text
 .globl _start
-.hidden _start
-.type _start, @function
+.def _start
+.type 32
+.endef
 _start:
 	lea STACK + 0x8000 - 40(%rip), %rsp
 
