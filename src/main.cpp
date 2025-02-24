@@ -15,6 +15,8 @@
 
 [[noreturn]] void kmain(const void* initrd) {
 	println("[kernel]: entered kmain");
+	init_driver_loader();
+
 	uacpi_initialize(0);
 	//uacpi_context_set_log_level(UACPI_LOG_TRACE);
 

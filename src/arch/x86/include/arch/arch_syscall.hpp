@@ -26,13 +26,54 @@ struct SyscallFrame : KTRAP_FRAME {
 	[[nodiscard]] constexpr u64 arg3() const {
 		return r9;
 	}
+
+	[[nodiscard]] inline bool arg4(u64& value) const {
+		__try {
+			value = *reinterpret_cast<usize*>(rsp + 40);
+			return true;
+		}
+		__except (1) {
+			return false;
+		}
 	}
 
-	[[nodiscard]] constexpr u64 arg4() const {
-		return rdi;
+	[[nodiscard]] inline bool arg5(u64& value) const {
+		__try {
+			value = *reinterpret_cast<usize*>(rsp + 48);
+			return true;
+		}
+		__except (1) {
+			return false;
+		}
 	}
 
-	[[nodiscard]] constexpr u64 arg5() const {
-		return rsi;
+	[[nodiscard]] inline bool arg6(u64& value) const {
+		__try {
+			value = *reinterpret_cast<usize*>(rsp + 56);
+			return true;
+		}
+		__except (1) {
+			return false;
+		}
+	}
+
+	[[nodiscard]] inline bool arg7(u64& value) const {
+		__try {
+			value = *reinterpret_cast<usize*>(rsp + 64);
+			return true;
+		}
+		__except (1) {
+			return false;
+		}
+	}
+
+	[[nodiscard]] inline bool arg8(u64& value) const {
+		__try {
+			value = *reinterpret_cast<usize*>(rsp + 72);
+			return true;
+		}
+		__except (1) {
+			return false;
+		}
 	}
 };

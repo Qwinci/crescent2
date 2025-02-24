@@ -1,5 +1,5 @@
 #include "arch/irq.hpp"
-#include "stdio.hpp"
+#include "utils/except_internals.hpp"
 
 struct Frame {
 	Frame* rbp;
@@ -65,6 +65,11 @@ extern "C" [[gnu::used]] bool x86_gp_fault_handler(KEXCEPTION_FRAME* ex_frame) {
 	}
 }
 
+void trap_frame_to_context(
+	KTRAP_FRAME* trap_frame,
+	KEXCEPTION_FRAME* exception_frame,
+	CONTEXT* ctx);
+
 extern "C" [[gnu::used]] bool x86_pagefault_handler(KEXCEPTION_FRAME* ex_frame) {
 	auto* frame = reinterpret_cast<KTRAP_FRAME*>(ex_frame->trap_frame);
 
@@ -113,6 +118,15 @@ extern "C" [[gnu::used]] bool x86_pagefault_handler(KEXCEPTION_FRAME* ex_frame) 
 	println("\tat ", frame->rip, Fmt::Reset);
 
 	backtrace_display();
+
+	CONTEXT ctx {};
+	ctx.context_flags = CONTEXT_FULL;
+	ctx.context_flags |= CONTEXT_SEGMENTS;
+	trap_frame_to_context(frame, ex_frame, &ctx);
+	EXCEPTION_RECORD record {};
+	record.exception_code = STATUS_ACCESS_VIOLATION;
+	record.exception_addr = reinterpret_cast<PVOID>(cr2);
+	RtlUnwindExInternal(nullptr, nullptr, &record, nullptr, &ctx, nullptr, UNW_FLAG_EHANDLER);
 
 	while (true) {
 		asm volatile("hlt");

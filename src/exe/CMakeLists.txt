@@ -1,1 +1,4 @@
-target_sources(crescent PRIVATE pe.cpp)
+target_sources(crescent PRIVATE
+	driver_loader.cpp
+	pe.cpp
+)

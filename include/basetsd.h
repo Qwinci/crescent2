@@ -11,6 +11,7 @@ typedef unsigned int ULONG_PTR;
 
 typedef unsigned __int64 ULONG64, *PULONG64;
 typedef __int64 LONG64, *PLONG64;
+typedef unsigned __int64 DWORD64, *PDWORD64;
 
 typedef ULONG_PTR KAFFINITY;
 
