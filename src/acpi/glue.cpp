@@ -194,7 +194,7 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle mutex, uacpi_u16 timeout) {
 	auto status = KeWaitForSingleObject(
 		mutex,
 		KWAIT_REASON::Executive,
-		KPROCESSOR_MODE::Kernel,
+		KernelMode,
 		false,
 		timeout != 0xFFFF ? &timeout_value : nullptr);
 	return status == STATUS_TIMEOUT ? UACPI_STATUS_TIMEOUT : UACPI_STATUS_OK;

@@ -26,10 +26,11 @@ enum class ThreadStatus {
 
 struct Cpu;
 
-enum class KPROCESSOR_MODE : i8 {
-	Kernel = 0,
-	User = 1,
-	Max = 2
+enum KPROCESSOR_MODE : i8 {
+	KernelMode,
+	UserMode,
+	MaxMode
+};
 };
 
 struct Thread : public ArchThread {
