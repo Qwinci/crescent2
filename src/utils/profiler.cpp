@@ -30,7 +30,7 @@ static int PROFILER_ACTIVE = 0;
 
 [[gnu::no_instrument_function]] static u64 sdi() {
 	u64 value;
-	asm volatile("pushfq; popq %0; cli" : "=rm"(value));
+	asm volatile("pushfq; pop qword ptr %0; cli" : "=rm"(value));
 	while (__atomic_exchange_n(&PROFILER_LOCK, 1, __ATOMIC_ACQUIRE)) {
 		__builtin_ia32_pause();
 	}
@@ -59,7 +59,7 @@ static int PROFILER_ACTIVE = 0;
 }
 
 [[gnu::no_instrument_function]] static void printc(char c) {
-	asm volatile("out %0, $0xE9" : : "a"(c));
+	asm volatile("out 0xE9, %0" : : "a"(c));
 }
 
 [[gnu::no_instrument_function]] static void prints(const char* s) {

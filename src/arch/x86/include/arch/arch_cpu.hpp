@@ -49,7 +49,7 @@ static_assert(offsetof(ArchCpu, number) == 0x1A4);
 
 inline Cpu* get_current_cpu() {
 	Cpu* cpu;
-	asm("mov %%gs:0, %0" : "=r"(cpu));
+	asm volatile("mov %0, gs:0" : "=r"(cpu));
 	return cpu;
 }
 

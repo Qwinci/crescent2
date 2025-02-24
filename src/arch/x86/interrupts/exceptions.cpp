@@ -9,7 +9,7 @@ struct Frame {
 static void backtrace_display() {
 	Frame frame {};
 	Frame* frame_ptr;
-	asm volatile("mov %%rbp, %0" : "=rm"(frame_ptr));
+	asm volatile("mov %0, rbp" : "=rm"(frame_ptr));
 	int limit = 20;
 	while (limit--) {
 		if (reinterpret_cast<usize>(frame_ptr) < 0xFFFFFFFF80000000) {
@@ -27,7 +27,8 @@ static void backtrace_display() {
 }
 
 #define GENERATE_HANDLER(handler_name, desc) \
-extern "C" bool x86_ ##handler_name ## _handler(IrqFrame* frame) { \
+extern "C" [[gnu::used]] bool x86_ ##handler_name ## _handler(KEXCEPTION_FRAME* ex_frame) { \
+	auto* frame = reinterpret_cast<KTRAP_FRAME*>(ex_frame->trap_frame); \
 	panic("[kernel][x86]: EXCEPTION: " desc, " at ", Fmt::Hex, frame->rip, Fmt::Reset); \
 	backtrace_display(); \
 }
@@ -54,7 +55,8 @@ GENERATE_HANDLER(hypervisor_injection_exception, "hypervisor injection exception
 GENERATE_HANDLER(vmm_comm_exception, "vmm communication exception")
 GENERATE_HANDLER(security_exception, "security exception")
 
-extern "C" bool x86_gp_fault_handler(IrqFrame* frame) { \
+extern "C" [[gnu::used]] bool x86_gp_fault_handler(KEXCEPTION_FRAME* ex_frame) {
+	auto* frame = reinterpret_cast<KTRAP_FRAME*>(ex_frame->trap_frame);
 	println("[kernel][x86]: EXCEPTION: general protection fault at ", Fmt::Hex, frame->rip, Fmt::Reset);
 	backtrace_display();
 
@@ -63,11 +65,13 @@ extern "C" bool x86_gp_fault_handler(IrqFrame* frame) { \
 	}
 }
 
-extern "C" bool x86_pagefault_handler(IrqFrame* frame) {
-	u64 cr2;
-	asm volatile("mov %%cr2, %0" : "=r"(cr2));
+extern "C" [[gnu::used]] bool x86_pagefault_handler(KEXCEPTION_FRAME* ex_frame) {
+	auto* frame = reinterpret_cast<KTRAP_FRAME*>(ex_frame->trap_frame);
 
-	auto error = frame->error;
+	u64 cr2;
+	asm volatile("mov %0, cr2" : "=r"(cr2));
+
+	auto error = frame->error_code;
 
 	const char* who;
 	if (error & 1 << 2) {

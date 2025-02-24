@@ -127,22 +127,22 @@ static void x86_detect_cpu_features() {
 
 static void x86_init_simd() {
 	u64 cr0;
-	asm volatile("mov %%cr0, %0" : "=r"(cr0));
+	asm volatile("mov %0, cr0" : "=r"(cr0));
 	// clear EM
 	cr0 &= ~(1 << 2);
 	// set MP
 	cr0 |= 1 << 1;
-	asm volatile("mov %0, %%cr0" : : "r"(cr0));
+	asm volatile("mov cr0, %0" : : "r"(cr0));
 
 	u64 cr4;
-	asm volatile("mov %%cr4, %0" : "=r"(cr4));
+	asm volatile("mov %0, cr4" : "=r"(cr4));
 	// set OSXMMEXCPT and OSFXSR
 	cr4 |= 1 << 10 | 1 << 9;
 	if (CPU_FEATURES.xsave) {
 		// set OSXSAVE
 		cr4 |= 1 << 18;
 	}
-	asm volatile("mov %0, %%cr4" : : "r"(cr4));
+	asm volatile("mov cr4, %0" : : "r"(cr4));
 
 	if (CPU_FEATURES.xsave) {
 		// x87 and SSE
@@ -165,13 +165,13 @@ static void x86_init_simd() {
 static void x86_cpu_resume(Cpu* self, Thread* current_thread, bool initial) {
 	lapic_init(self, initial);
 
-	asm volatile("mov $6 * 8, %%eax; ltr %%ax" : : : "eax");
+	asm volatile("mov eax, (6 * 8); ltr ax" : : : "eax");
 
 	init_usermode();
 	x86_init_simd();
 
 	u64 cr4;
-	asm volatile("mov %%cr4, %0" : "=r"(cr4));
+	asm volatile("mov %0, cr4" : "=r"(cr4));
 	if (CPU_FEATURES.umip) {
 		cr4 |= 1U << 11;
 	}
@@ -181,7 +181,7 @@ static void x86_cpu_resume(Cpu* self, Thread* current_thread, bool initial) {
 	if (CPU_FEATURES.smap) {
 		cr4 |= 1U << 21;
 	}
-	asm volatile("mov %0, %%cr4" : : "r"(cr4));
+	asm volatile("mov cr4, %0" : : "r"(cr4));
 
 	msrs::IA32_GSBASE.write(reinterpret_cast<u64>(self));
 	self->current_thread = current_thread;

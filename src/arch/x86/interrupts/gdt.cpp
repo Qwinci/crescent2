@@ -42,12 +42,12 @@ void x86_load_gdt(Tss* tss) {
 	};
 	asm volatile(R"(
 		lgdt %0
-		mov $0x10, %%eax
-		mov %%eax, %%ss
-		push $0x8
-		lea 0f(%%rip), %%rax
-		push %%rax
-		lretq
+		mov eax, 0x10
+		mov ss, eax
+		push 0x8
+		lea rax, [rip + 0f]
+		push rax
+		retfq
 		0:
 	)" : : "m"(gdtr) : "eax");
 }

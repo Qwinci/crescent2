@@ -57,7 +57,7 @@ extern "C" [[gnu::used]] inline void arch_lower_irql(KIRQL new_irql) {
 	// if the hardware irql was updated prior to the previous statement then change it back
 	if (new_irql < __atomic_load_n(reinterpret_cast<__seg_gs KIRQL*>(24), __ATOMIC_RELAXED)) {
 		__atomic_store_n(reinterpret_cast<__seg_gs KIRQL*>(24), new_irql, __ATOMIC_RELAXED);
-		asm volatile("mov %0, %%cr8" : : "r"(static_cast<u64>(new_irql)));
+		asm volatile("mov cr8, %0" : : "r"(static_cast<u64>(new_irql)));
 	}
 #else
 	if (new_irql != APC_LEVEL) {

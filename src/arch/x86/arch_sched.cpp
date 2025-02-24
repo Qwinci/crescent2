@@ -14,47 +14,47 @@ asm(R"(
 
 // void sched_switch_thread(ArchThread* prev, ArchThread* next)
 sched_switch_thread:
-	push %rbx
-	push %rcx
-	push %rbp
-	push %rdi
-	push %rsi
-	push %r12
-	push %r13
-	push %r14
-	push %r15
-	sub $(6 * 16), %rsp
-	movaps %xmm0, 0(%rsp)
-	movaps %xmm1, 16(%rsp)
-	movaps %xmm2, 32(%rsp)
-	movaps %xmm3, 48(%rsp)
-	movaps %xmm4, 64(%rsp)
-	movaps %xmm5, 80(%rsp)
+	push rbx
+	push rcx
+	push rbp
+	push rdi
+	push rsi
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, (6 * 16)
+	movaps [rsp + 0], xmm0
+	movaps [rsp + 16], xmm1
+	movaps [rsp + 32], xmm2
+	movaps [rsp + 48], xmm3
+	movaps [rsp + 64], xmm4
+	movaps [rsp + 80], xmm5
 
-	mov %rsp, 8(%rcx)
+	mov [rcx + 8], rsp
 
 	// current->lock = false
-	movq $0, 176(%rcx)
+	mov qword ptr [rcx + 176], 0
 
-	mov 8(%rdx), %rsp
+	mov rsp, [rdx + 8]
 
-	movaps 0(%rsp), %xmm0
-	movaps 16(%rsp), %xmm1
-	movaps 32(%rsp), %xmm2
-	movaps 48(%rsp), %xmm3
-	movaps 64(%rsp), %xmm4
-	movaps 80(%rsp), %xmm5
-	add $(6 * 16), %rsp
+	movaps xmm0, [rsp + 0]
+	movaps xmm1, [rsp + 16]
+	movaps xmm2, [rsp + 32]
+	movaps xmm3, [rsp + 48]
+	movaps xmm4, [rsp + 64]
+	movaps xmm5, [rsp + 80]
+	add rsp, (6 * 16)
 
-	pop %r15
-	pop %r14
-	pop %r13
-	pop %r12
-	pop %rsi
-	pop %rdi
-	pop %rbp
-	pop %rcx
-	pop %rbx
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rsi
+	pop rdi
+	pop rbp
+	pop rcx
+	pop rbx
 
 	ret
 .popsection
@@ -66,7 +66,7 @@ void sched_before_switch(Thread* prev, Thread* thread) {
 			xsave(prev->simd, ~0);
 		}
 		else {
-			asm volatile("fxsaveq %0" : : "m"(*prev->simd) : "memory");
+			asm volatile("fxsave64 %0" : : "m"(*prev->simd) : "memory");
 		}
 	}
 
@@ -79,7 +79,7 @@ void sched_before_switch(Thread* prev, Thread* thread) {
 			xrstor(thread->simd, ~0);
 		}
 		else {
-			asm volatile("fxrstorq %0" : : "m"(*thread->simd) : "memory");
+			asm volatile("fxrstor64 %0" : : "m"(*thread->simd) : "memory");
 		}
 
 		msrs::IA32_FSBASE.write(thread->fs_base);
@@ -122,38 +122,47 @@ namespace {
 asm(R"(
 .pushsection .text
 .globl arch_on_first_switch
-.hidden arch_on_first_switch
 arch_on_first_switch:
-	mov %rcx, %rbx
-	xor %ecx, %ecx
+	mov rbx, rcx
+	xor ecx, ecx
 	call arch_lower_irql
-	mov %rbx, %rcx
+	mov rcx, rbx
 
 	ret
 
 .globl arch_on_first_switch_user
-.hidden arch_on_first_switch_user
 arch_on_first_switch_user:
-	mov %rcx, %rbx
-	xor %ecx, %ecx
+	mov rbx, rcx
+	xor ecx, ecx
 	call arch_lower_irql
-	mov %rbx, %rdx
+	mov rdx, rbx
 
-	xor %eax, %eax
-	xor %ebx, %ebx
-	xor %r8d, %r8d
-	xor %r9d, %r9d
-	xor %r10d, %r10d
-	xor %r11d, %r11d
-	xor %r12d, %r12d
-	xor %r13d, %r13d
-	xor %r14d, %r14d
-	xor %r15d, %r15d
+	xor eax, eax
+	xor ebx, ebx
+	xor r8d, r8d
+	xor r9d, r9d
+	xor r10d, r10d
+	xor r11d, r11d
+	xor r12d, r12d
+	xor r13d, r13d
+	xor r14d, r14d
+	xor r15d, r15d
 
-	pop %rcx
-	add $8, %rsp
-	pop %r11
-	pop %rsp
+	pxor xmm6, xmm6
+	pxor xmm7, xmm7
+	pxor xmm8, xmm8
+	pxor xmm9, xmm9
+	pxor xmm10, xmm10
+	pxor xmm11, xmm11
+	pxor xmm12, xmm12
+	pxor xmm13, xmm13
+	pxor xmm14, xmm14
+	pxor xmm15, xmm15
+
+	pop rcx
+	add rsp, 8
+	pop r11
+	pop rsp
 	swapgs
 	sysretq
 .popsection

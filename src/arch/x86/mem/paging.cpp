@@ -245,7 +245,7 @@ void PageMap::unmap(u64 virt) {
 
 	level3[level3_index] = 0;
 	orig_virt &= ~0xFFF;
-	asm volatile("invlpg (%0)" : : "r"(orig_virt) : "memory");
+	asm volatile("invlpg [%0]" : : "r"(orig_virt) : "memory");
 }
 
 u64 PageMap::get_phys(u64 virt) {
@@ -366,14 +366,14 @@ void PageMap::protect(u64 virt, PageFlags flags, CacheMode cache_mode) {
 	level3[level3_index] |= real_flags;
 
 	orig_virt &= ~0xFFF;
-	asm volatile("invlpg (%0)" : : "r"(orig_virt) : "memory");
+	asm volatile("invlpg [%0]" : : "r"(orig_virt) : "memory");
 }
 
 void PageMap::use() {
 	auto guard = lock.lock();
 
 	auto phys = to_phys(level0);
-	asm volatile("mov %0, %%cr3" : : "r"(phys) : "memory");
+	asm volatile("mov cr3, %0" : : "r"(phys) : "memory");
 }
 
 PageMap::PageMap(PageMap* kernel_map) {

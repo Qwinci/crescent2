@@ -6,18 +6,18 @@
 .type 32
 .endef
 _start:
-	lea STACK + 0x8000 - 40(%rip), %rsp
+	lea rsp, [rip + STACK + 0x8000 - 40]
 
+	mov rax, cr0
 	// clear EM
-	mov %cr0, %rax
-	and $~(1 << 2), %rax
+	and rax, ~(1 << 2)
 	// set MP
-	or $(1 << 1), %rax
-	mov %rax, %cr0
+	or rax, 1 << 1
+	mov cr0, rax
 
 	// set OSXMMEXCPT and OSFXSR
-	mov %cr4, %rax
-	or $(1 << 10 | 1 << 9), %rax
-	mov %rax, %cr4
+	mov rax, cr4
+	or rax, (1 << 10 | 1 << 9)
+	mov cr4, rax
 
 	jmp early_start

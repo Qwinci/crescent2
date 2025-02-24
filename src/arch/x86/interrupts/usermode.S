@@ -4,75 +4,73 @@
 .endef
 
 // num == rax
-// a0 == rdx
-// a1 == r8
-// a2 == r9
-// a3 == r10
-// a3 == rdi
-// a4 == rsi
+// a0 == r10
+// a1 == rdx
+// a2 == r8
+// a3 == r9
 
 x86_syscall_stub:
+.seh_proc x86_syscall_stub
+
 	swapgs
 
-	mov %rax, %gs:16
-	mov %gs:0x188, %rax
-
-	mov %rsp, 24(%rax)
-	mov 16(%rax), %rsp
-
-	mov %gs:16, %rax
+	mov gs:16, rsp
+	mov rsp, gs:44
 
 	cld
 	sti
 
-	sub $(80 + 6 * 16), %rsp
-	mov %rax, 0(%rsp)
-	mov %rcx, 8(%rsp)
-	mov %rdx, 16(%rsp)
-	mov %r8, 24(%rsp)
-	mov %r9, 32(%rsp)
-	mov %r10, 40(%rsp)
-	mov %r11, 48(%rsp)
-	mov %rdi, 56(%rsp)
-	mov %rsi, 64(%rsp)
-	stmxcsr 72(%rsp)
-	movaps %xmm0, 80(%rsp)
-	movaps %xmm1, 96(%rsp)
-	movaps %xmm2, 112(%rsp)
-	movaps %xmm3, 128(%rsp)
-	movaps %xmm4, 144(%rsp)
-	movaps %xmm5, 160(%rsp)
+	sub rsp, (80 + 6 * 16)
+	.seh_stackalloc 80 + 6 * 16
+	.seh_endprologue
 
-	mov %rsp, %rcx
+	mov [rsp + 0], rax
+	mov [rsp + 8], rcx
+	mov [rsp + 16], rdx
+	mov [rsp + 24], r8
+	mov [rsp + 32], r9
+	mov [rsp + 40], r10
+	mov [rsp + 48], r11
+	mov rax, gs:16
+	mov [rsp + 56], rax
+	stmxcsr [rsp + 72]
+	movaps [rsp + 80], xmm0
+	movaps [rsp + 96], xmm1
+	movaps [rsp + 112], xmm2
+	movaps [rsp + 128], xmm3
+	movaps [rsp + 144], xmm4
+	movaps [rsp + 160], xmm5
+
+	mov rcx, rsp
+
+	// todo fix seh here
+	sub rsp, 32
 	call syscall_handler
+	add rsp, 32
 
-	mov 0(%rsp), %rax
-	mov 8(%rsp), %rcx
-	mov 16(%rsp), %rdx
-	mov 24(%rsp), %r8
-	mov 32(%rsp), %r9
-	mov 40(%rsp), %r10
-	mov 48(%rsp), %r11
-	mov 56(%rsp), %rdi
-	mov 64(%rsp), %rsi
-	ldmxcsr 72(%rsp)
-	movaps 80(%rsp), %xmm0
-	movaps 96(%rsp), %xmm1
-	movaps 112(%rsp), %xmm2
-	movaps 128(%rsp), %xmm3
-	movaps 144(%rsp), %xmm4
-	movaps 160(%rsp), %xmm5
+	mov rax, [rsp + 0]
+	mov rcx, [rsp + 8]
+	mov rdx, [rsp + 16]
+	mov r8, [rsp + 24]
+	mov r9, [rsp + 32]
+	mov r10, [rsp + 40]
+	mov r11, [rsp + 48]
+	ldmxcsr [rsp + 72]
+	movaps xmm0, [rsp + 80]
+	movaps xmm1, [rsp + 96]
+	movaps xmm2, [rsp + 112]
+	movaps xmm3, [rsp + 128]
+	movaps xmm4, [rsp + 144]
+	movaps xmm5, [rsp + 160]
 
-	add $(80 + 6 * 16), %rsp
+	add rsp, (80 + 6 * 16)
 
 	cli
 
-	mov %rax, %gs:16
-	mov %gs:0x188, %rax
-	mov 24(%rax), %rsp
-	mov %gs:16, %rax
+	mov rsp, gs:16
 
 	swapgs
 	sysretq
+.seh_endproc
 
 .section ".note.GNU-stack"

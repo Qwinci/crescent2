@@ -21,8 +21,9 @@ set(COMMON_CFLAGS
 	-fno-threadsafe-statics
 	-fno-stack-protector -fno-omit-frame-pointer
 	-ffreestanding -fno-strict-aliasing -fno-eliminate-unused-debug-types
-	-Wno-invalid-offsetof -Wno-unused-parameter -Wno-unused-const-variable
-	-g3 -ggdb -fvisibility=hidden #-finstrument-functions
+	-Wno-invalid-offsetof -Wno-unused-parameter -Wno-unused-const-variable -Wno-unused-function
+	-g3 -ggdb #-finstrument-functions
+	-masm=intel
 )
 set(COMMON_CXXFLAGS
 	${COMMON_CFLAGS}

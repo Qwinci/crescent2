@@ -1,7 +1,5 @@
 #include "x86/irq.hpp"
 #include "arch/irq.hpp"
-#include "utils/irq_guard.hpp"
-#include "stdio.hpp"
 #include "arch/arch_irq.hpp"
 #include "arch/x86/dev/lapic.hpp"
 #include "arch/arch_irql.hpp"
@@ -110,23 +108,25 @@ void deregister_irq_handler(u32 num, IrqHandler* handler) {
 	IRQ_HANDLERS[num].remove(handler);
 }
 
-extern "C" [[gnu::used]] void arch_irq_handler(IrqFrame* frame, u8 num) {
-	if ((frame->cs & 0b11) == 3) {
+extern "C" [[gnu::used]] void arch_irq_handler(KTRAP_FRAME* frame) {
+	if (frame->previous_mode == UserMode) {
 		asm volatile("swapgs");
 	}
+
+	auto num = frame->error_code;
 
 	auto vec_irql = num / 16;
 	KIRQL old_irql = arch_get_current_irql();
 #if CONFIG_LAZY_IRQL
 	if (vec_irql < old_irql) {
-		asm volatile("mov %0, %%cr8" : : "r"(static_cast<u64>(old_irql)));
+		asm volatile("mov cr8, %0" : : "r"(static_cast<u64>(old_irql)));
 		// send self-ipi to defer the irq
 		lapic_ipi_self(num);
 		lapic_eoi();
 
 		__atomic_store_n(reinterpret_cast<__seg_gs KIRQL*>(24), vec_irql, __ATOMIC_RELAXED);
 
-		if ((frame->cs & 0b11) == 3) {
+		if (frame->previous_mode == UserMode) {
 			asm volatile("swapgs");
 		}
 		return;
@@ -148,7 +148,7 @@ extern "C" [[gnu::used]] void arch_irq_handler(IrqFrame* frame, u8 num) {
 
 	KeLowerIrql(old_irql);
 
-	if ((frame->cs & 0b11) == 3) {
+	if (frame->previous_mode == UserMode) {
 		asm volatile("swapgs");
 	}
 }
