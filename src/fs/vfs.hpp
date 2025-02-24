@@ -1,6 +1,7 @@
 #pragma once
 #include "shared_ptr.hpp"
 #include "string_view.hpp"
+#include "unique_ptr.hpp"
 #include <hz/result.hpp>
 
 enum class FileType {
@@ -32,3 +33,5 @@ struct Vfs {
 };
 
 std::shared_ptr<VNode> vfs_lookup(std::shared_ptr<VNode> root, kstd::wstring_view path);
+
+extern std::unique_ptr<Vfs> ROOT_VFS;
