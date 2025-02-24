@@ -15,9 +15,11 @@ struct SlabAllocator {
 	}
 
 	void* alloc(usize size) {
+		auto old = KfRaiseIrql(DISPATCH_LEVEL);
+
 		for (auto& list : freelists) {
 			if (size <= list.size) {
-				auto old = KeAcquireSpinLockRaiseToDpc(&list.lock);
+				KeAcquireSpinLockAtDpcLevel(&list.lock);
 				if (!list.pages.is_empty()) {
 					auto page = list.pages.front();
 
@@ -67,10 +69,13 @@ struct SlabAllocator {
 			}
 		}
 
+		KeLowerIrql(old);
 		return nullptr;
 	}
 
 	void dealloc(void* ptr, usize size) {
+		auto old = KfRaiseIrql(DISPATCH_LEVEL);
+
 		for (auto& list : freelists) {
 			if (size <= list.size) {
 				auto* node = new (ptr) Node {};
@@ -79,7 +84,7 @@ struct SlabAllocator {
 				auto page = Page::from_phys(phys);
 				assert(page);
 
-				auto old = KeAcquireSpinLockRaiseToDpc(&list.lock);
+				KeAcquireSpinLockAtDpcLevel(&list.lock);
 
 				--page->slab.count;
 
@@ -100,6 +105,8 @@ struct SlabAllocator {
 				return;
 			}
 		}
+
+		KeLowerIrql(old);
 	}
 
 private:

@@ -15,7 +15,7 @@ struct Node {
 
 namespace {
 	hz::list<Page, &Page::hook> LIST {};
-	hz::spinlock<void> LOCK {};
+	KSPIN_LOCK LOCK {};
 }
 
 Page* PAGE_REGION;
@@ -69,10 +69,11 @@ usize pmalloc() {
 		return early_pmalloc();
 	}
 
-	IrqGuard irq_guard;
-	auto guard = LOCK.lock();
+	auto old = KeAcquireSpinLockRaiseToDpc(&LOCK);
+
 	auto page = LIST.pop();
 	if (!page) {
+		KeReleaseSpinLock(&LOCK, old);
 		return 0;
 	}
 
@@ -82,13 +83,14 @@ usize pmalloc() {
 		LIST.push(next);
 	}
 
+	KeReleaseSpinLock(&LOCK, old);
 	return page->phys();
 }
 
 void pfree(usize phys) {
-	IrqGuard irq_guard;
-	auto guard = LOCK.lock();
+	auto old = KeAcquireSpinLockRaiseToDpc(&LOCK);
 	auto page = Page::from_phys(phys);
 	page->pm.count = 1;
 	LIST.push(page);
+	KeReleaseSpinLock(&LOCK, old);
 }

@@ -18,9 +18,9 @@ struct TscClockSource : public ClockSource {
 static hz::manually_init<TscClockSource> TSC_CLOCK_SOURCE {};
 
 void tsc_init() {
-	u64 start = rdtsc();
+	u64 start = rdtsc_ordered();
 	mdelay(10);
-	u64 end = rdtsc();
+	u64 end = rdtsc_ordered();
 	auto tsc_freq = (end - start) * 100;
 
 	auto info = cpuid(0x80000007, 0);
