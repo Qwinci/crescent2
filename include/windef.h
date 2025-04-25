@@ -30,7 +30,7 @@ typedef long long LONGLONG;
 typedef unsigned char UCHAR;
 typedef unsigned short USHORT;
 typedef unsigned int UINT;
-typedef unsigned int ULONG, *PULONG;
+typedef unsigned long ULONG, *PULONG;
 typedef unsigned long long ULONGLONG;
 
 typedef int BOOL;

@@ -125,10 +125,14 @@ NTAPI void ExRaiseAccessViolation() {
 	RtlRaiseStatus(STATUS_ACCESS_VIOLATION);
 }
 
+NTAPI void ExRaiseStatus(NTSTATUS status) {
+	RtlRaiseStatus(status);
+}
+
 extern "C" EXCEPTION_DISPOSITION __CxxFrameHandler3(
 	EXCEPTION_RECORD* exception_record,
 	void* establisher_frame,
 	CONTEXT* ctx,
 	DISPATCHER_CONTEXT* dispatcher_ctx) {
-	panic("[kernel][except]: cxx frame handler called");
+	return ExceptionContinueSearch;
 }

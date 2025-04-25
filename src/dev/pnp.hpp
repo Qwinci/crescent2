@@ -5,6 +5,9 @@
 #include "utils/spinlock.hpp"
 #include "sched/event.hpp"
 #include "sched/apc.hpp"
+#include "arch/irq.hpp"
+#include "mem/mm.hpp"
+#include "guiddef.h"
 
 struct DRIVER_OBJECT;
 struct IRP;
@@ -30,7 +33,11 @@ struct KDEVICE_QUEUE {
 #endif
 };
 
+#define DO_BUFFERED_IO 4
 #define DO_EXCLUSIVE 8
+#define DO_DIRECT_IO 0x10
+#define DO_MAP_IO_BUFFER 0x20
+#define DO_BUS_ENUMERATED_DEVICE 0x1000
 
 struct [[gnu::aligned(16)]] DEVICE_OBJECT {
 	i16 type;
@@ -65,6 +72,8 @@ struct [[gnu::aligned(16)]] DEVICE_OBJECT {
 
 struct DEVICE_OBJECT_POWER_EXTENSION;
 
+struct IrqInfo;
+
 struct DEVOBJ_EXTENSION {
 	i16 type;
 	u16 size;
@@ -79,7 +88,7 @@ struct DEVOBJ_EXTENSION {
 	u32 start_io_flags;
 	VPB* vpb;
 	void* dependency_node;
-	void* interrupt_ctx;
+	IrqInfo* interrupts;
 	i32 interrupt_count;
 	void* verifier_ctx;
 };
@@ -99,6 +108,8 @@ using PDRIVER_UNLOAD = void (*)(DRIVER_OBJECT* driver);
 using PDRIVER_DISPATCH = NTSTATUS (*)(DEVICE_OBJECT* device, IRP* irp);
 using PDRIVER_CANCEL = void (*)(DEVICE_OBJECT* device, IRP* irp);
 
+#define IRP_MJ_CREATE 0
+#define IRP_MJ_CLOSE 2
 #define IRP_MJ_READ 3
 #define IRP_MJ_WRITE 4
 #define IRP_MJ_FLUSH_BUFFERS 9
@@ -127,6 +138,7 @@ using PDRIVER_CANCEL = void (*)(DEVICE_OBJECT* device, IRP* irp);
 #define IRP_MN_QUERY_DEVICE_TEXT 12
 #define IRP_MN_FILTER_RESOURCE_REQUIREMENTS 13
 #define IRP_MN_QUERY_ID 19
+#define IRP_MN_QUERY_BUS_INFORMATION 21
 
 struct DRIVER_OBJECT {
 	i16 type;
@@ -146,21 +158,6 @@ struct DRIVER_OBJECT {
 	PDRIVER_STARTIO driver_start_io;
 	PDRIVER_UNLOAD driver_unload;
 	PDRIVER_DISPATCH major_function[IRP_MJ_MAXIMUM_FUNCTION + 1];
-};
-
-using PFN_NUMBER = u32;
-
-// pages = (PFN_NUMBER*) (mdl + 1)
-struct MDL {
-	MDL* next;
-	i16 size;
-	i16 mdl_flags;
-	Process* process;
-	void* mapped_system_va;
-	// in context of subject thread virt addr of buffer = start_va | byte_offset
-	void* start_va;
-	u32 byte_count;
-	u32 byte_offset;
 };
 
 struct IORING_OBJECT;
@@ -191,9 +188,38 @@ struct KDEVICE_QUEUE_ENTRY {
 
 struct IO_SECURITY_CONTEXT;
 
-enum class INTERFACE_TYPE {
-	Undefined = -1
+enum INTERFACE_TYPE {
+	PCIBus = 5
 };
+
+struct PNP_BUS_INFORMATION {
+	GUID bus_type_guid;
+	INTERFACE_TYPE legacy_bus_type;
+	ULONG bus_number;
+};
+
+#define CmResourceTypeNull 0
+#define CmResourceTypePort 1
+#define CmResourceTypeInterrupt 2
+#define CmResourceTypeMemory 3
+#define CmResourceTypeDma 4
+#define CmResourceTypeDeviceSpecific 5
+#define CmResourceTypeBusNumber 6
+#define CmResourceTypeMemoryLarge 7
+
+enum CM_SHARE_DISPOSITION {
+	CmResourceShareUndetermined = 0,
+	CmResourceShareDeviceExclusive,
+	CmResourceShareDriverExclusive,
+	CmResourceShareShared
+};
+
+#define CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE 0
+#define CM_RESOURCE_INTERRUPT_LATCHED 1
+#define CM_RESOURCE_INTERRUPT_MESSAGE 2
+#define CM_RESOURCE_INTERRUPT_WAKE_HINT 0x20
+
+#define CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN ((ULONG) -2)
 
 #pragma pack(push, 4)
 struct CM_PARTIAL_RESOURCE_DESCRIPTOR {
@@ -292,6 +318,109 @@ struct CM_RESOURCE_LIST {
 	CM_FULL_RESOURCE_DESCRIPTOR list[];
 };
 
+typedef enum _IRQ_PRIORITY {
+	IrqPriorityUndefined = 0,
+	IrqPriorityLow,
+	IrqPriorityNormal,
+	IrqPriorityHigh
+} IRQ_PRIORITY;
+
+typedef enum _IRQ_DEVICE_POLICY {
+	IrqPolicyMachineDefault = 0,
+	IrqPolicyAllCloseProcessors,
+	IrqPolicyOneCloseProcessor,
+	IrqPolicyAllProcessorsInMachine,
+	IrqPolicySpecifiedProcessors,
+	IrqPolicySpreadMessagesAcrossAllProcessors,
+	IrqPolicyAllProcessorsInMachineWhenSteered
+} IRQ_DEVICE_POLICY;
+
+#define IO_RESOURCE_PREFERRED 1
+#define IO_RESOURCE_DEFAULT 2
+#define IO_RESOURCE_ALTERNATIVE 8
+
+struct IO_RESOURCE_DESCRIPTOR {
+	UCHAR option;
+	UCHAR type;
+	UCHAR share_disposition;
+	UCHAR spare1;
+	USHORT flags;
+	USHORT spare2;
+	union {
+		struct {
+			ULONG length;
+			ULONG alignment;
+			PHYSICAL_ADDRESS minimum_address;
+			PHYSICAL_ADDRESS maximum_address;
+		} port;
+
+		struct {
+			ULONG length;
+			ULONG alignment;
+			PHYSICAL_ADDRESS minimum_address;
+			PHYSICAL_ADDRESS maximum_address;
+		} memory;
+
+		struct {
+			ULONG minimum_vector;
+			ULONG maximum_vector;
+			IRQ_DEVICE_POLICY affinity_policy;
+			USHORT group;
+			IRQ_PRIORITY priority_policy;
+			KAFFINITY targeted_processors;
+		} interrupt;
+
+		struct {
+			ULONG length;
+			ULONG alignment;
+			PHYSICAL_ADDRESS minimum_address;
+			PHYSICAL_ADDRESS maximum_address;
+		} generic;
+
+		struct {
+			ULONG data[3];
+		} device_private;
+
+		struct {
+			ULONG length40;
+			ULONG alignment40;
+			PHYSICAL_ADDRESS minimum_address;
+			PHYSICAL_ADDRESS maximum_address;
+		} memory40;
+
+		struct {
+			ULONG length48;
+			ULONG alignment48;
+			PHYSICAL_ADDRESS minimum_address;
+			PHYSICAL_ADDRESS maximum_address;
+		} memory48;
+
+		struct {
+			ULONG length64;
+			ULONG alignment64;
+			PHYSICAL_ADDRESS minimum_address;
+			PHYSICAL_ADDRESS maximum_address;
+		} memory64;
+	} u;
+};
+
+struct IO_RESOURCE_LIST {
+	USHORT version;
+	USHORT revision;
+	ULONG count;
+	IO_RESOURCE_DESCRIPTOR descriptors[];
+};
+
+struct IO_RESOURCE_REQUIREMENTS_LIST {
+	ULONG list_size;
+	INTERFACE_TYPE interface_type;
+	ULONG bus_number;
+	ULONG slot_number;
+	ULONG reserved[3];
+	ULONG alternative_lists;
+	IO_RESOURCE_LIST list[];
+};
+
 enum class DEVICE_RELATION_TYPE {
 	Bus,
 	Ejection,
@@ -359,6 +488,11 @@ struct IO_STACK_LOCATION {
 		struct {
 			DEVICE_RELATION_TYPE type;
 		} query_device_relations;
+
+		// FilterResourceRequirements
+		struct {
+			IO_RESOURCE_REQUIREMENTS_LIST* list;
+		} filter_resource_requirements;
 
 		// QueryId
 		struct {
@@ -499,6 +633,8 @@ inline void IoSetCompletionRoutine(
 	}
 }
 
+#define FILE_AUTOGENERATED_DEVICE_NAME 0x80
+
 NTAPI extern "C" NTSTATUS IoCreateDevice(
 	DRIVER_OBJECT* driver,
 	ULONG device_ext_size,
@@ -507,6 +643,53 @@ NTAPI extern "C" NTSTATUS IoCreateDevice(
 	ULONG characteristics,
 	BOOLEAN exclusive,
 	DEVICE_OBJECT** device);
+
+NTAPI extern "C" DEVICE_OBJECT* IoAttachDeviceToDeviceStack(DEVICE_OBJECT* source, DEVICE_OBJECT* target);
+NTAPI extern "C" DEVICE_OBJECT* IoGetAttachedDevice(DEVICE_OBJECT* device);
+NTAPI extern "C" DEVICE_OBJECT* IoGetAttachedDeviceReference(DEVICE_OBJECT* device);
+
+NTAPI extern "C" DEVICE_OBJECT* IoGetLowerDeviceObject(DEVICE_OBJECT* device);
+
+NTAPI extern "C" DEVICE_OBJECT* IoGetRelatedDeviceObject(FILE_OBJECT* file);
+
+NTAPI extern "C" NTSTATUS IoGetDeviceObjectPointer(
+	PUNICODE_STRING object_name,
+	ACCESS_MASK desired_access,
+	FILE_OBJECT** file_object,
+	DEVICE_OBJECT** device);
+
+enum DEVICE_REGISTRY_PROPERTY {
+	DevicePropertyDeviceDescription = 0,
+	DevicePropertyHardwareID = 1,
+	DevicePropertyCompatibleIDs = 2,
+	DevicePropertyBootConfiguration = 3,
+	DevicePropertyBootConfigurationTranslated = 4,
+	DevicePropertyClassName = 5,
+	DevicePropertyClassGuid = 6,
+	DevicePropertyDriverKeyName = 7,
+	DevicePropertyManufacturer = 8,
+	DevicePropertyFriendlyName = 9,
+	DevicePropertyLocationInformation = 0xA,
+	DevicePropertyPhysicalDeviceObjectName = 0xB,
+	DevicePropertyBusTypeGuid = 0xC,
+	DevicePropertyLegacyBusType = 0xD,
+	DevicePropertyBusNumber = 0xE,
+	DevicePropertyEnumeratorName = 0xF,
+	DevicePropertyAddress = 0x10,
+	DevicePropertyUINumber = 0x11,
+	DevicePropertyInstallState = 0x12,
+	DevicePropertyRemovalPolicy = 0x13,
+	DevicePropertyResourceRequirements = 0x14,
+	DevicePropertyAllocatedResources = 0x15,
+	DevicePropertyContainerID = 0x16
+};
+
+NTAPI extern "C" NTSTATUS IoGetDeviceProperty(
+	DEVICE_OBJECT* device,
+	DEVICE_REGISTRY_PROPERTY device_property,
+	ULONG buffer_length,
+	PVOID property_buffer,
+	PULONG result_length);
 
 NTAPI extern "C" IRP* IoAllocateIrp(CCHAR stack_size, BOOLEAN charge_quota);
 NTAPI extern "C" void IoFreeIrp(IRP* irp);

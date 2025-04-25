@@ -5,6 +5,10 @@
 #include "string_view.hpp"
 #include "mem/vmem.hpp"
 #include "arch/paging.hpp"
+#include "fs/object.hpp"
+#include "flags_enum.hpp"
+#include "descriptors.hpp"
+#include "handle_table.hpp"
 
 enum class ProcessPriority {
 	Idle = 1,
@@ -49,12 +53,25 @@ struct UniqueKernelMapping {
 	usize size {};
 };
 
+struct _PEB;
+
+enum class MappingFlags {
+	None,
+	Backed = 1 << 0,
+	DisallowUserProtectionChange = 1 << 1
+};
+FLAGS_ENUM(MappingFlags);
+
 struct Process {
 	Process(kstd::wstring_view name, bool user);
 	~Process();
 
-	usize allocate(void* base, usize size, PageFlags flags, UniqueKernelMapping* mapping);
+	usize allocate(void* base, usize size, PageFlags page_flags, MappingFlags mapping_flags, UniqueKernelMapping* mapping);
 	void free(usize ptr, usize size);
+
+	void mark_as_exiting(int exit_status, ProcessDescriptor* skip_lock);
+
+	ProcessDescriptor* create_descriptor();
 
 	kstd::wstring name;
 	PageMap page_map;
@@ -66,6 +83,7 @@ struct Process {
 		usize base {};
 		usize size {};
 		PageFlags flags {};
+		MappingFlags mapping_flags {};
 
 		constexpr bool operator==(const Mapping& other) const {
 			return base == other.base;
@@ -78,6 +96,12 @@ struct Process {
 
 	KSPIN_LOCK mapping_lock {};
 	hz::rb_tree<Mapping, &Mapping::hook> mappings {};
+	usize ntdll_base {};
+	_PEB* peb {};
+	hz::list<ProcessDescriptor, &ProcessDescriptor::hook> descriptors {};
+	KSPIN_LOCK desc_lock {};
+	bool exiting {};
+	HandleTable handle_table {};
 
 private:
 	VMem vmem {};

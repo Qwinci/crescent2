@@ -1,6 +1,6 @@
 #include "ntdef.h"
 #include "stdio.hpp"
-#include "acpi.hpp"
+#include "acpi/acpi.hpp"
 #include "cstring.hpp"
 #include <hz/algorithm.hpp>
 

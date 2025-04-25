@@ -4,6 +4,9 @@
 #include "ntdef.h"
 #include "dpfilter.h"
 #include "crt/string.h"
+#include "crt/assert.h"
+#include "guiddef.h"
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,6 +40,7 @@ NTKERNELAPI PVOID MmMapIoSpace(
 	PHYSICAL_ADDRESS PhysicalAddress,
 	SIZE_T NumberOfBytes,
 	MEMORY_CACHING_TYPE CacheType);
+NTKERNELAPI void MmUnmapIoSpace(PVOID BaseAddress, SIZE_T NumberOfBytes);
 
 typedef enum _BUS_DATA_TYPE {
 	PCIConfiguration = 4
@@ -53,6 +57,248 @@ typedef struct _PCI_SLOT_NUMBER {
 	} u;
 } PCI_SLOT_NUMBER;
 
+typedef struct _PCI_COMMON_HEADER {
+	USHORT VendorID;
+	USHORT DeviceID;
+	USHORT Command;
+	USHORT Status;
+	UCHAR RevisionID;
+	UCHAR ProgIf;
+	UCHAR SubClass;
+	UCHAR BaseClass;
+	UCHAR CacheLineSize;
+	UCHAR LatencyTimer;
+	UCHAR HeaderType;
+	UCHAR BIST;
+	union {
+		struct _PCI_HEADER_TYPE_0 {
+			ULONG BaseAddresses[6];
+			ULONG CIS;
+			USHORT SubVendorID;
+			USHORT SubSystemID;
+			ULONG ROMBaseAddress;
+			UCHAR CapabilitiesPtr;
+			UCHAR Reserved1[3];
+			ULONG Reserved2;
+			UCHAR InterruptLine;
+			UCHAR InterruptPin;
+			UCHAR MinimumGrant;
+			UCHAR MaximumLatency;
+		} type0;
+
+		// pci to pci bridge
+		struct _PCI_HEADER_TYPE_1 {
+			ULONG BaseAddresses[2];
+			UCHAR PrimaryBus;
+			UCHAR SecondaryBus;
+			UCHAR SubordinateBus;
+			UCHAR SecondaryLatency;
+			UCHAR IOBase;
+			UCHAR IOLimit;
+			USHORT SecondaryStatus;
+			USHORT MemoryBase;
+			USHORT MemoryLimit;
+			USHORT PrefetchBase;
+			USHORT PrefetchLimit;
+			ULONG PrefetchBaseUpper32;
+			ULONG PrefetchLimitUpper32;
+			USHORT IOBaseUpper16;
+			USHORT IOLimitUpper16;
+			UCHAR CapabilitiesPtr;
+			UCHAR Reserved1[3];
+			ULONG ROMBaseAddress;
+			UCHAR InterruptLine;
+			UCHAR InterruptPin;
+			USHORT BridgeControl;
+		} type1;
+
+		// pci to cardbus bridge
+		struct _PCI_HEADER_TYPE_2 {
+			ULONG SocketRegistersBaseAddress;
+			UCHAR CapabilitiesPtr;
+			UCHAR Reserved;
+			USHORT SecondaryStatus;
+			UCHAR PrimaryBus;
+			UCHAR SecondaryBus;
+			UCHAR SubordinateBus;
+			UCHAR SecondaryLatency;
+			struct {
+				ULONG Base;
+				ULONG Limit;
+			} Range[4];
+			UCHAR InterruptLine;
+			UCHAR InterruptPin;
+			USHORT BridgeControl;
+		} type2;
+	} u;
+} PCI_COMMON_HEADER;
+
+#ifdef __cplusplus
+
+typedef struct _PCI_COMMON_CONFIG : PCI_COMMON_HEADER {
+	UCHAR DeviceSpecific[192];
+} PCI_COMMON_CONFIG;
+
+#else
+
+typedef struct _PCI_COMMON_CONFIG {
+	PCI_COMMON_HEADER;
+	UCHAR DeviceSpecific[192];
+} PCI_COMMON_CONFIG;
+
+#endif
+
+// PCI_COMMON_CONFIG.Command
+#define PCI_ENABLE_IO_SPACE 1
+#define PCI_ENABLE_MEMORY_SPACE 2
+#define PCI_ENABLE_BUS_MASTER 4
+#define PCI_ENABLE_SPECIAL_CYCLES 8
+#define PCI_ENABLE_WRITE_AND_INVALIDATE 0x10
+#define PCI_ENABLE_VGA_COMPATIBLE_PALETTE 0x20
+#define PCI_ENABLE_PARITY 0x40
+#define PCI_ENABLE_WAIT_CYCLE 0x80
+#define PCI_ENABLE_SERR 0x100
+#define PCI_ENABLE_FAST_BACK_TO_BACK 0x200
+#define PCI_DISABLE_LEVEL_INTERRUPT 0x400
+
+#define PCI_CAPABILITY_ID_POWER_MANAGEMENT 1
+#define PCI_CAPABILITY_ID_MSI 5
+#define PCI_CAPABILITY_ID_PCI_EXPRESS 0x10
+#define PCI_CAPABILITY_ID_MSIX 0x11
+
+typedef struct _PCI_CAPABILITIES_HEADER {
+	UCHAR CapabilityID;
+	UCHAR Next;
+} PCI_CAPABILITIES_HEADER;
+
+// Power Management Capability
+typedef struct _PCI_PMC {
+	UCHAR Version : 3;
+	UCHAR PMEClock : 1;
+	UCHAR Rsvd1 : 1;
+	UCHAR DeviceSpecificInitialization : 1;
+	UCHAR Rsvd2 : 2;
+	struct _PM_SUPPORT {
+		UCHAR Rsvd2 : 1;
+		UCHAR D1 : 1;
+		UCHAR D2 : 1;
+		UCHAR PMED0 : 1;
+		UCHAR PMED1 : 1;
+		UCHAR PMED2 : 1;
+		UCHAR PMED3Hot : 1;
+		UCHAR PMED3Cold : 1;
+	} Support;
+} PCI_PMC;
+
+typedef struct _PCI_PMCSR {
+	USHORT PowerState : 2;
+	USHORT Rsvd1 : 1;
+	USHORT NoSoftReset : 1;
+	USHORT Rsvd2 : 4;
+	USHORT PMEnable : 1;
+	USHORT DataSelect : 4;
+	USHORT DataScale : 2;
+	USHORT PMEStatus : 1;
+} PCI_PMCSR;
+
+typedef struct _PCI_PMCSR_BSE {
+	UCHAR Rsvd1 : 6;
+	// B2_B3#
+	UCHAR D3HotSupportsStopClock : 1;
+	// BPCC_EN
+	UCHAR BusPowerClockControlEnabled : 1;
+} PCI_PMCSR_BSE;
+
+typedef struct _PCI_PM_CAPABILITY {
+	PCI_CAPABILITIES_HEADER Header;
+	union {
+		PCI_PMC Capabilities;
+		USHORT AsUSHORT;
+	} PMC;
+	union {
+		PCI_PMCSR ControlStatus;
+		USHORT AsUSHORT;
+	} PMCSR;
+	union {
+		PCI_PMCSR_BSE BridgeSupport;
+		UCHAR AsUCHAR;
+	} PMCSR_BSE;
+	UCHAR Data;
+} PCI_PM_CAPABILITY;
+
+typedef struct _PCI_MSI_CAPABILITY {
+	PCI_CAPABILITIES_HEADER Header;
+	struct _PCI_MSI_MESSAGE_CONTROL {
+		USHORT MSIEnable : 1;
+		USHORT MultipleMessageCapable : 3;
+		USHORT MultipleMessageEnable : 3;
+		USHORT CapableOf64Bits : 1;
+		USHORT PerVectorMaskCapable : 1;
+		USHORT Reserved : 7;
+	} MessageControl;
+	union {
+		struct _PCI_MSI_MESSAGE_ADDRESS {
+			ULONG Reserved : 2;
+			ULONG Address : 30;
+		} Register;
+		ULONG Raw;
+	} MessageAddressLower;
+
+	union {
+		struct {
+			USHORT MessageData;
+			USHORT Reserved;
+			ULONG MaskBits;
+			ULONG PendingBits;
+		} Option32Bit;
+		// if CapableOf64Bits is 1
+		struct {
+			ULONG MessageAddressUpper;
+			USHORT MessageData;
+			USHORT Reserved;
+			ULONG MaskBits;
+			ULONG PendingBits;
+		} Option64Bit;
+	};
+} PCI_MSI_CAPABILITY;
+
+#define MSIX_TABLE_OFFSET_MASK 0xFFFFFFF8
+#define MSIX_PBA_TABLE_ENTRY_SIZE 8
+#define MSIX_PENDING_BITS_IN_PBA_TABLE_ENTRY 64
+
+typedef struct {
+	union {
+		struct {
+			ULONG BaseIndexRegister : 3;
+			ULONG Reserved : 29;
+		};
+		ULONG TableOffset;
+	};
+} MSIX_TABLE_POINTER;
+
+typedef struct {
+	PHYSICAL_ADDRESS MessageAddress;
+	ULONG MessageData;
+	struct {
+		ULONG Mask : 1;
+		ULONG Reserved : 15;
+		ULONG StLower : 8;
+		ULONG StUpper : 8;
+	} VectorControl;
+} PCI_MSIX_TABLE_ENTRY;
+
+typedef struct {
+	PCI_CAPABILITIES_HEADER Header;
+	struct {
+		USHORT TableSize : 11;
+		USHORT Reserved : 3;
+		USHORT FunctionMask : 1;
+		USHORT MSIXEnable : 1;
+	} MessageControl;
+	MSIX_TABLE_POINTER MessageTable;
+	MSIX_TABLE_POINTER PBATable;
+} PCI_MSIX_CAPABILITY;
+
 NTKERNELAPI ULONG HalGetBusDataByOffset(
 	BUS_DATA_TYPE BusDataType,
 	ULONG BusNumber,
@@ -68,6 +314,7 @@ NTKERNELAPI ULONG HalSetBusDataByOffset(
 	ULONG Offset,
 	ULONG Length);
 
+#define IRP_MJ_DEVICE_CONTROL 0xE
 #define IRP_MJ_SHUTDOWN 0x10
 #define IRP_MJ_POWER 0x16
 #define IRP_MJ_PNP 0x1B
@@ -91,6 +338,25 @@ NTKERNELAPI ULONG HalSetBusDataByOffset(
 #define IRP_MN_QUERY_DEVICE_TEXT 12
 #define IRP_MN_FILTER_RESOURCE_REQUIREMENTS 13
 #define IRP_MN_QUERY_ID 19
+#define IRP_MN_QUERY_BUS_INFORMATION 21
+
+#define CTL_CODE(DeviceType, Function, Method, Access) \
+	((ULONG) ((DeviceType) << 16 | (Access) << 14 | (Function) << 2 | (Method)))
+#define DEVICE_TYPE_FROM_CTL_CODE(Code) (((ULONG) (Code) >> 16) & 0xFFFF)
+#define METHOD_FROM_CTL_CODE(Code) ((ULONG) (Code) & 3)
+
+#define METHOD_BUFFERED 0
+#define METHOD_IN_DIRECT 1
+#define METHOD_OUT_DIRECT 2
+#define METHOD_NEITHER 3
+
+#define METHOD_DIRECT_TO_HARDWARE METHOD_IN_DIRECT
+#define METHOD_DIRECT_FROM_HARDWARE METHOD_OUT_DIRECT
+
+#define FILE_ANY_ACCESS 0
+#define FILE_SPECIAL_ACCESS FILE_ANY_ACCESS
+#define FILE_READ_ACCESS 1
+#define FILE_WRITE_ACCESS 2
 
 #define DECLSPEC_ALIGN(align_value) __declspec(align(align_value))
 
@@ -113,6 +379,7 @@ typedef UCHAR KIRQL;
 #define LOW_LEVEL 0
 #define APC_LEVEL 1
 #define DISPATCH_LEVEL 2
+#define HIGH_LEVEL 15
 
 typedef struct _DISPATCHER_HEADER {
 	union {
@@ -384,6 +651,69 @@ typedef enum _INTERFACE_TYPE {
 	PCIBus = 5
 } INTERFACE_TYPE;
 
+typedef struct _PNP_BUS_INFORMATION {
+	GUID BusTypeGuid;
+	INTERFACE_TYPE LegacyBusType;
+	ULONG BusNumber;
+} PNP_BUS_INFORMATION;
+
+#define CmResourceTypeNull 0
+#define CmResourceTypePort 1
+#define CmResourceTypeInterrupt 2
+#define CmResourceTypeMemory 3
+#define CmResourceTypeDma 4
+#define CmResourceTypeDeviceSpecific 5
+#define CmResourceTypeBusNumber 6
+#define CmResourceTypeMemoryLarge 7
+
+typedef enum _CM_SHARE_DISPOSITION {
+	CmResourceShareUndetermined = 0,
+	CmResourceShareDeviceExclusive,
+	CmResourceShareDriverExclusive,
+	CmResourceShareShared
+} CM_SHARE_DISPOSITION;
+
+#define CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE 0
+#define CM_RESOURCE_INTERRUPT_LATCHED 1
+#define CM_RESOURCE_INTERRUPT_MESSAGE 2
+#define CM_RESOURCE_INTERRUPT_WAKE_HINT 0x20
+
+#define CM_RESOURCE_INTERRUPT_LEVEL_LATCHED_BITS 1
+#define CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN ((ULONG) -2)
+
+#define CM_RESOURCE_MEMORY_READ_WRITE 0
+#define CM_RESOURCE_MEMORY_READ_ONLY 1
+#define CM_RESOURCE_MEMORY_WRITE_ONLY 2
+#define CM_RESOURCE_MEMORY_WRITEABILITY_MASK 3
+#define CM_RESOURCE_MEMORY_PREFETCHABLE 4
+
+#define CM_RESOURCE_MEMORY_COMBINEDWRITE 8
+#define CM_RESOURCE_MEMORY_24 0x10
+#define CM_RESOURCE_MEMORY_CACHEABLE 0x20
+#define CM_RESOURCE_MEMORY_WINDOW_DECODE 0x40
+#define CM_RESOURCE_MEMORY_BAR 0x80
+
+#define CM_RESOURCE_MEMORY_LARGE 0xE00
+#define CM_RESOURCE_MEMORY_LARGE_40 0x200
+#define CM_RESOURCE_MEMORY_LARGE_48 0x400
+#define CM_RESOURCE_MEMORY_LARGE_64 0x800
+
+#define CM_RESOURCE_MEMORY_LARGE_40_MAXLEN 0xFFFFFFFF00
+#define CM_RESOURCE_MEMORY_LARGE_48_MAXLEN 0xFFFFFFFF0000
+#define CM_RESOURCE_MEMORY_LARGE_64_MAXLEN 0xFFFFFFFF00000000
+
+#define CM_RESOURCE_PORT_MEMORY 0
+#define CM_RESOURCE_PORT_IO 1
+#define CM_RESOURCE_PORT_10_BIT_DECODE 4
+#define CM_RESOURCE_PORT_12_BIT_DECODE 8
+#define CM_RESOURCE_PORT_16_BIT_DECODE 0x10
+#define CM_RESOURCE_PORT_POSITIVE_DECODE 0x20
+#define CM_RESOURCE_PORT_PASSIVE_DECODE 0x40
+#define CM_RESOURCE_PORT_WINDOW_DECODE 0x80
+#define CM_RESOURCE_PORT_BAR 0x100
+
+#define ALL_PROCESSOR_GROUPS 0xFFFF
+
 #pragma pack(push, 4)
 typedef struct _CM_PARTIAL_RESOURCE_DESCRIPTOR {
 	UCHAR Type;
@@ -448,7 +778,7 @@ typedef struct _CM_PARTIAL_RESOURCE_DESCRIPTOR {
 			PHYSICAL_ADDRESS Start;
 			ULONG Length64;
 		} Memory64;
-	};
+	} u;
 } CM_PARTIAL_RESOURCE_DESCRIPTOR;
 #pragma pack(pop)
 
@@ -470,6 +800,109 @@ typedef struct _CM_RESOURCE_LIST {
 	CM_FULL_RESOURCE_DESCRIPTOR List[];
 } CM_RESOURCE_LIST, *PCM_RESOURCE_LIST;
 
+typedef enum _IRQ_PRIORITY {
+	IrqPriorityUndefined = 0,
+	IrqPriorityLow,
+	IrqPriorityNormal,
+	IrqPriorityHigh
+} IRQ_PRIORITY;
+
+typedef enum _IRQ_DEVICE_POLICY {
+	IrqPolicyMachineDefault = 0,
+	IrqPolicyAllCloseProcessors,
+	IrqPolicyOneCloseProcessor,
+	IrqPolicyAllProcessorsInMachine,
+	IrqPolicySpecifiedProcessors,
+	IrqPolicySpreadMessagesAcrossAllProcessors,
+	IrqPolicyAllProcessorsInMachineWhenSteered
+} IRQ_DEVICE_POLICY;
+
+#define IO_RESOURCE_PREFERRED 1
+#define IO_RESOURCE_DEFAULT 2
+#define IO_RESOURCE_ALTERNATIVE 8
+
+typedef struct _IO_RESOURCE_DESCRIPTOR {
+	UCHAR Option;
+	UCHAR Type;
+	UCHAR ShareDisposition;
+	UCHAR Spare1;
+	USHORT Flags;
+	USHORT Spare2;
+	union {
+		struct {
+			ULONG Length;
+			ULONG Alignment;
+			PHYSICAL_ADDRESS MinimumAddress;
+			PHYSICAL_ADDRESS MaximumAddress;
+		} Port;
+
+		struct {
+			ULONG Length;
+			ULONG Alignment;
+			PHYSICAL_ADDRESS MinimumAddress;
+			PHYSICAL_ADDRESS MaximumAddress;
+		} Memory;
+
+		struct {
+			ULONG MinimumVector;
+			ULONG MaximumVector;
+			IRQ_DEVICE_POLICY AffinityPolicy;
+			USHORT Group;
+			IRQ_PRIORITY PriorityPolicy;
+			KAFFINITY TargetedProcessors;
+		} Interrupt;
+
+		struct {
+			ULONG Length;
+			ULONG Alignment;
+			PHYSICAL_ADDRESS MinimumAddress;
+			PHYSICAL_ADDRESS MaximumAddress;
+		} Generic;
+
+		struct {
+			ULONG Data[3];
+		} DevicePrivate;
+
+		struct {
+			ULONG Length40;
+			ULONG Alignment40;
+			PHYSICAL_ADDRESS MinimumAddress;
+			PHYSICAL_ADDRESS MaximumAddress;
+		} Memory40;
+
+		struct {
+			ULONG Length48;
+			ULONG Alignment48;
+			PHYSICAL_ADDRESS MinimumAddress;
+			PHYSICAL_ADDRESS MaximumAddress;
+		} Memory48;
+
+		struct {
+			ULONG Length64;
+			ULONG Alignment64;
+			PHYSICAL_ADDRESS MinimumAddress;
+			PHYSICAL_ADDRESS MaximumAddress;
+		} Memory64;
+	} u;
+} IO_RESOURCE_DESCRIPTOR, *PIO_RESOURCE_DESCRIPTOR;
+
+typedef struct _IO_RESOURCE_LIST {
+	USHORT Version;
+	USHORT Revision;
+	ULONG Count;
+	IO_RESOURCE_DESCRIPTOR Descriptors[];
+} IO_RESOURCE_LIST;
+
+typedef struct _IO_RESOURCE_REQUIREMENTS_LIST {
+	ULONG ListSize;
+	INTERFACE_TYPE InterfaceType;
+	ULONG BusNumber;
+	ULONG SlotNumber;
+	ULONG Reserved[3];
+	ULONG AlternativeLists;
+	IO_RESOURCE_LIST List[];
+} IO_RESOURCE_REQUIREMENTS_LIST, *PIO_RESOURCE_REQUIREMENTS_LIST;
+
 typedef enum {
 	BusQueryDeviceID = 0,
 	BusQueryHardwareIDs = 1,
@@ -482,12 +915,32 @@ typedef enum {
 #define MAX_DEVICE_ID_LEN 200
 #define REGSTR_VAL_MAX_HCID_LEN 1024
 
+#ifdef _WIN64
+#define POINTER_ALIGNMENT DECLSPEC_ALIGN(8)
+#else
+#define POINTER_ALIGNMENT
+#endif
+
 typedef struct _IO_STACK_LOCATION {
 	UCHAR MajorFunction;
 	UCHAR MinorFunction;
 	UCHAR Flags;
 	UCHAR Control;
 	union {
+		// if method != METHOD_NEITHER:
+		// user output buffer == UserBuffer
+		// user input buffer == SystemBuffer
+		// driver reads from SystemBuffer and writes to SystemBuffer
+		// else
+		// user output buffer == UserBuffer
+		// user input buffer == Type3InputBuffer
+		struct {
+			ULONG OutputBufferLength;
+			ULONG POINTER_ALIGNMENT InputBufferLength;
+			ULONG POINTER_ALIGNMENT IoControlCode;
+			PVOID Type3InputBuffer;
+		} DeviceIoControl;
+
 		struct {
 			DEVICE_RELATION_TYPE Type;
 		} QueryDeviceRelations;
@@ -713,6 +1166,109 @@ NTKERNELAPI void IofCompleteRequest(PIRP Irp, CCHAR PriorityBoost);
 #define IoCallDriver(DeviceObject, Irp) IofCallDriver(DeviceObject, Irp)
 #define IoCompleteRequest(Irp, PriorityBoost) IofCompleteRequest(Irp, PriorityBoost)
 
+typedef struct _KINTERRUPT* PKINTERRUPT;
+
+typedef enum _KINTERRUPT_MODE {
+	LevelSensitive,
+	Latched
+} KINTERRUPT_MODE;
+
+typedef enum _KINTERRUPT_POLARITY {
+	InterruptPolarityUnknown,
+	InterruptActiveHigh,
+	InterruptRisingEdge = InterruptActiveHigh,
+	InterruptActiveLow,
+	InterruptFallingEdge = InterruptActiveLow,
+	InterruptActiveBoth,
+	InterruptActiveBothTriggerLow = InterruptActiveBoth,
+	InterruptActiveBothTriggerHigh
+} KINTERRUPT_POLARITY;
+
+typedef struct _IO_INTERRUPT_MESSAGE_INFO_ENTRY {
+	PHYSICAL_ADDRESS MessageAddress;
+	KAFFINITY TargetProcessorSet;
+	PKINTERRUPT InterruptObject;
+	ULONG MessageData;
+	ULONG Vector;
+	KIRQL Irql;
+	KINTERRUPT_MODE Mode;
+	KINTERRUPT_POLARITY Polarity;
+} IO_INTERRUPT_MESSAGE_INFO_ENTRY;
+
+typedef struct _IO_INTERRUPT_MESSAGE_INFO {
+	KIRQL UnifiedIrql;
+	ULONG MessageCount;
+	IO_INTERRUPT_MESSAGE_INFO_ENTRY MessageInfo[];
+} IO_INTERRUPT_MESSAGE_INFO, *PIO_INTERRUPT_MESSAGE_INFO;
+
+typedef BOOLEAN (*PKSERVICE_ROUTINE)(
+	struct _KINTERRUPT* Interrupt,
+	PVOID ServiceContext);
+
+typedef BOOLEAN (*PKMESSAGE_SERVICE_ROUTINE)(
+	struct _KINTERRUPT* Interrupt,
+	PVOID ServiceContext,
+	ULONG MessageID);
+
+typedef struct _IO_CONNECT_INTERRUPT_FULLY_SPECIFIED_PARAMETERS {
+	PDEVICE_OBJECT PhysicalDeviceObject;
+	PKINTERRUPT* InterruptObject;
+	PKSERVICE_ROUTINE ServiceRoutine;
+	PVOID ServiceContext;
+	PKSPIN_LOCK SpinLock;
+	KIRQL SynchronizeIrql;
+	BOOLEAN FloatingSave;
+	BOOLEAN ShareVector;
+	ULONG Vector;
+	KIRQL Irql;
+	KINTERRUPT_MODE InterruptMode;
+	KAFFINITY ProcessorEnableMask;
+	USHORT Group;
+} IO_CONNECT_INTERRUPT_FULLY_SPECIFIED_PARAMETERS;
+
+typedef struct _IO_CONNECT_INTERRUPT_LINE_BASED_PARAMETERS {
+	PDEVICE_OBJECT PhysicalDeviceObject;
+	PKINTERRUPT* InterruptObject;
+	PKSERVICE_ROUTINE ServiceRoutine;
+	PVOID ServiceContext;
+	PKSPIN_LOCK SpinLock;
+	KIRQL SynchronizeIrql;
+	BOOLEAN FloatingSave;
+} IO_CONNECT_INTERRUPT_LINE_BASED_PARAMETERS;
+
+typedef struct _IO_CONNECT_INTERRUPT_MESSAGE_BASED_PARAMETERS {
+	PDEVICE_OBJECT PhysicalDeviceObject;
+	union {
+		PVOID* Generic;
+		PIO_INTERRUPT_MESSAGE_INFO* InterruptMessageTable;
+		PKINTERRUPT* InterruptObject;
+	} ConnectionContext;
+	PKMESSAGE_SERVICE_ROUTINE MessageServiceRoutine;
+	PVOID ServiceContext;
+	PKSPIN_LOCK SpinLock;
+	KIRQL SynchronizeIrql;
+	BOOLEAN FloatingSave;
+	PKSERVICE_ROUTINE FallBackServiceRoutine;
+} IO_CONNECT_INTERRUPT_MESSAGE_BASED_PARAMETERS;
+
+#define CONNECT_FULLY_SPECIFIED 1
+#define CONNECT_LINE_BASED 2
+#define CONNECT_MESSAGE_BASED 3
+#define CONNECT_FULLY_SPECIFIED_GROUP 4
+#define CONNECT_MESSAGE_BASED_PASSIVE 5
+#define CONNECT_CURRENT_VERSION 5
+
+typedef struct _IO_CONNECT_INTERRUPT_PARAMETERS {
+	ULONG Version;
+	union {
+		IO_CONNECT_INTERRUPT_FULLY_SPECIFIED_PARAMETERS FullySpecified;
+		IO_CONNECT_INTERRUPT_LINE_BASED_PARAMETERS LineBased;
+		IO_CONNECT_INTERRUPT_MESSAGE_BASED_PARAMETERS MessageBased;
+	};
+} IO_CONNECT_INTERRUPT_PARAMETERS, *PIO_CONNECT_INTERRUPT_PARAMETERS;
+
+NTKERNELAPI NTSTATUS IoConnectInterruptEx(PIO_CONNECT_INTERRUPT_PARAMETERS Parameters);
+
 typedef enum _SYSTEM_INFORMATION_CLASS {
 	SystemFirmwareTableInformation = 76
 } SYSTEM_INFORMATION_CLASS;
@@ -725,7 +1281,19 @@ NTKERNELAPI NTSTATUS ZwQuerySystemInformation(
 
 typedef LONG KPRIORITY;
 
-typedef enum {
+NTKERNELAPI KIRQL KfRaiseIrql(KIRQL NewIrql);
+NTKERNELAPI void KeLowerIrql(KIRQL NewIrql);
+
+FORCEINLINE void KeInitializeSpinLock(PKSPIN_LOCK SpinLock) {
+	*SpinLock = 0;
+}
+
+NTKERNELAPI void KeAcquireSpinLockAtDpcLevel(PKSPIN_LOCK SpinLock);
+NTKERNELAPI KIRQL KeAcquireSpinLockRaiseToDpc(PKSPIN_LOCK SpinLock);
+NTKERNELAPI void KeReleaseSpinLock(PKSPIN_LOCK SpinLock, KIRQL NewIrql);
+NTKERNELAPI void KeReleaseSpinLockFromDpcLevel(PKSPIN_LOCK SpinLock);
+
+typedef enum _EVENT_TYPE {
 	NotificationEvent,
 	SynchronizationEvent
 } EVENT_TYPE;
@@ -734,6 +1302,112 @@ NTKERNELAPI void KeInitializeEvent(PKEVENT Event, EVENT_TYPE Type, BOOLEAN State
 NTKERNELAPI LONG KeSetEvent(PKEVENT Event, KPRIORITY Increment, BOOLEAN Wait);
 NTKERNELAPI void KeClearEvent(PKEVENT Event);
 NTKERNELAPI LONG KeResetEvent(PKEVENT Event);
+
+typedef struct _KSEMAPHORE {
+	DISPATCHER_HEADER Header;
+	LONG Limit;
+} KSEMAPHORE, *PKSEMAPHORE;
+
+NTKERNELAPI void KeInitializeSemaphore(PKSEMAPHORE Semaphore, LONG Count, LONG Limit);
+NTKERNELAPI LONG KeReleaseSemaphore(
+	PKSEMAPHORE Semaphore,
+	KPRIORITY Increment,
+	LONG Adjustment,
+	BOOLEAN Wait);
+
+typedef enum _KWAIT_REASON {
+	Executive,
+	FreePage,
+	PageIn,
+	PoolAllocation,
+	DelayExecution,
+	Suspended,
+	UserRequest
+} KWAIT_REASON;
+
+typedef struct _KWAIT_BLOCK {
+	LIST_ENTRY WaitListEntry;
+	UCHAR WaitType;
+	volatile UCHAR BlockState;
+	USHORT WaitKey;
+#ifdef _WIN64
+	LONG SpareLong;
+#endif
+	union {
+		struct _KTHREAD* Thread;
+		struct _KQUEUE* NotificationQueue;
+		struct _KDPC* Dpc;
+	};
+	PVOID Object;
+	PVOID SparePtr;
+} KWAIT_BLOCK, *PKWAIT_BLOCK;
+
+NTKERNELAPI NTSTATUS KeWaitForSingleObject(
+	PVOID Object,
+	KWAIT_REASON WaitReason,
+	KPROCESSOR_MODE WaitMode,
+	BOOLEAN Alertable,
+	PLARGE_INTEGER Timeout);
+NTKERNELAPI NTSTATUS KeWaitForMultipleObjects(
+	ULONG Count,
+	PVOID Object[],
+	WAIT_TYPE WaitType,
+	KWAIT_REASON WaitReason,
+	KPROCESSOR_MODE WaitMode,
+	BOOLEAN Alertable,
+	PLARGE_INTEGER Timeout,
+	PKWAIT_BLOCK WaitBlockArray);
+
+NTKERNELAPI LARGE_INTEGER KeQueryPerformanceCounter(PLARGE_INTEGER PerformanceFrequency);
+
+typedef struct _KTHREAD* PKTHREAD;
+
+#ifdef _M_AMD64
+
+ULONG64 __readgsqword(ULONG Offset);
+#pragma intrinsic(__readgsqword)
+
+FORCEINLINE PKTHREAD KeGetCurrentThread(void) {
+	return (PKTHREAD) __readgsqword(0x188);
+}
+
+#else
+
+NTKERNELAPI PKTHREAD KeGetCurrentThread(void);
+
+#endif
+
+typedef struct _OBJECT_ATTRIBUTES {
+	ULONG Length;
+	HANDLE RootDirectory;
+	PUNICODE_STRING ObjectName;
+	ULONG Attributes;
+	PVOID SecurityDescriptor;
+	PVOID SecurityQualityOfService;
+} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
+
+typedef struct _CLIENT_ID {
+	HANDLE UniqueProcess;
+	HANDLE UniqueThread;
+} CLIENT_ID, *PCLIENT_ID;
+
+typedef void (*PKSTART_ROUTINE)(PVOID StartContext);
+
+NTKERNELAPI NTSTATUS PsCreateSystemThread(
+	PHANDLE ThreadHandle,
+	ULONG DesiredAccess,
+	POBJECT_ATTRIBUTES ObjectAttributes,
+	HANDLE ProcessHandle,
+	PCLIENT_ID ClientId,
+	PKSTART_ROUTINE StartRoutine,
+	PVOID StartContext);
+
+NTKERNELAPI NTSTATUS KeDelayExecutionThread(
+	KPROCESSOR_MODE WaitMode,
+	BOOLEAN Alertable,
+	PLARGE_INTEGER Interval);
+
+#define CONTAINING_RECORD(ptr, type, field) ((type*) ((PCHAR) (ptr) - offsetof(type, field)))
 
 #ifdef __cplusplus
 }

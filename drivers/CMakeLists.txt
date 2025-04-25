@@ -6,11 +6,7 @@ set(DRIVERS "" CACHE INTERNAL "")
 
 macro(DRIVER NAME)
 	add_executable(${NAME} ${ARGN})
-	target_compile_options(${NAME} PRIVATE
-		-Wall -Wextra
-		-fno-exceptions -fno-rtti
-		--target=${TARGET}
-	)
+	target_compile_options(${NAME} PRIVATE ${COMMON_CXXFLAGS})
 	target_include_directories(
 		${NAME}
 		PRIVATE
@@ -19,12 +15,11 @@ macro(DRIVER NAME)
 		"${PROJECT_SOURCE_DIR}/drivers/crt"
 	)
 	target_link_options(${NAME} PRIVATE
-		--target=${TARGET}
 		-nostdlib
-		-Wl,/driver,/subsystem:native,/entry:DriverEntry
-		"$<TARGET_LINKER_FILE_DIR:kernel_stubs>/kernel_stubs.lib"
+		-Wl,/driver,/subsystem:native,/entry:DriverEntry,/ignore:longsections
+		crescent.lib
 	)
-	add_dependencies(${NAME} kernel_stubs)
+	add_dependencies(${NAME} crescent)
 	set_target_properties(${NAME} PROPERTIES SUFFIX ".sys")
 	add_custom_command(TARGET ${NAME}
 		POST_BUILD
@@ -33,6 +28,7 @@ macro(DRIVER NAME)
 	set(DRIVERS "${DRIVERS};${NAME}" CACHE INTERNAL "")
 endmacro()
 
-add_subdirectory(kernel_stubs)
 add_subdirectory(aux_klib)
 add_subdirectory(pci)
+add_subdirectory(rtl8169)
+add_subdirectory(uacpi)

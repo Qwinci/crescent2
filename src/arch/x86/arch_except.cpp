@@ -364,6 +364,9 @@ void RtlUnwindExInternal(
 
 	while (true) {
 		auto control_pc = unwind_ctx.rip;
+		if (!control_pc) {
+			return;
+		}
 
 		DWORD64 image_base;
 		auto entry = RtlLookupFunctionEntry(

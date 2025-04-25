@@ -7,14 +7,7 @@ struct KINTERRUPT;
 
 using PKSERVICE_ROUTINE = bool (*)(KINTERRUPT* irq, void* service_ctx);
 
-struct IrqHandler {
-	hz::list_hook hook {};
-	PKSERVICE_ROUTINE fn {};
-	void* service_ctx {};
-	bool can_be_shared {};
-};
-
-void register_irq_handler(u32 num, IrqHandler* handler);
-void deregister_irq_handler(u32 num, IrqHandler* handler);
+void register_irq_handler(KINTERRUPT* irq);
+void deregister_irq_handler(KINTERRUPT* irq);
 
 void arch_request_software_irq(KIRQL level);

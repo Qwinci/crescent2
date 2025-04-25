@@ -14,6 +14,14 @@ namespace acpi {
 		u32 creator_revision;
 	};
 
+	struct [[gnu::packed]] Madt {
+		SdtHeader hdr;
+		u32 lapic_addr;
+		u32 flags;
+
+		static constexpr u32 FLAG_LEGACY_PIC = 1;
+	};
+
 	enum class RegionSpace : u8 {
 		SystemMemory = 0x0
 	};
@@ -28,4 +36,6 @@ namespace acpi {
 
 	void init(void* rsdp_ptr);
 	void* get_table(const char (&signature)[5], u32 index = 0);
+
+	void worker_init();
 }

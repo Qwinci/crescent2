@@ -2,9 +2,10 @@
 #include "types.hpp"
 #include "mem/pmalloc.hpp"
 #include "flags_enum.hpp"
+#include "utils/spinlock.hpp"
+#include "caching.hpp"
 #include <hz/manually_init.hpp>
 #include <hz/list.hpp>
-#include <hz/spinlock.hpp>
 
 enum class PageFlags {
 	Read = 1 << 0,
@@ -13,13 +14,6 @@ enum class PageFlags {
 	User = 1 << 3
 };
 FLAGS_ENUM(PageFlags);
-
-enum class CacheMode {
-	WriteBack,
-	WriteCombine,
-	WriteThrough,
-	Uncached
-};
 
 class PageMap {
 public:
@@ -46,5 +40,5 @@ public:
 private:
 	u64* level0;
 	hz::list<Page, &Page::hook> used_pages {};
-	hz::spinlock<void> lock {};
+	KSPIN_LOCK lock {};
 };

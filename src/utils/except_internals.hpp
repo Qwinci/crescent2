@@ -106,4 +106,4 @@ NTAPI extern "C" void RtlUnwindEx(
 	UNWIND_HISTORY_TABLE* history_table);
 
 extern "C" void RtlCaptureContext(CONTEXT* ctx);
-extern "C" void RtlRestoreContext(CONTEXT* ctx, EXCEPTION_RECORD* exception_record);
+extern "C" [[noreturn]] void RtlRestoreContext(CONTEXT* ctx, EXCEPTION_RECORD* exception_record);

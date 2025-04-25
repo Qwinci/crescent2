@@ -1,9 +1,8 @@
 #include "queued_spinlock.hpp"
 
-void KeAcquireInStackQueuedSpinLock(KSPIN_LOCK* lock, KLOCK_QUEUE_HANDLE* lock_handle) {
+NTAPI void KeAcquireInStackQueuedSpinLockAtDpcLevel(KSPIN_LOCK* lock, KLOCK_QUEUE_HANDLE* lock_handle) {
 	lock_handle->lock_queue.next.store(nullptr, hz::memory_order::relaxed);
 	lock_handle->lock_queue.lock = lock;
-	lock_handle->old_irql = KfRaiseIrql(DISPATCH_LEVEL);
 
 	auto old_tail = reinterpret_cast<KSPIN_LOCK_QUEUE*>(lock->value.exchange(
 		reinterpret_cast<usize>(&lock_handle->lock_queue),
@@ -34,7 +33,7 @@ void KeAcquireInStackQueuedSpinLock(KSPIN_LOCK* lock, KLOCK_QUEUE_HANDLE* lock_h
 	}
 }
 
-void KeReleaseInStackQueuedSpinLock(KLOCK_QUEUE_HANDLE* lock_handle) {
+NTAPI void KeReleaseInStackQueuedSpinLockFromDpcLevel(KLOCK_QUEUE_HANDLE* lock_handle) {
 	auto next = lock_handle->lock_queue.next.load(hz::memory_order::relaxed);
 	if (next) {
 		auto value = next->lock->value.load(hz::memory_order::relaxed);
@@ -57,4 +56,15 @@ void KeReleaseInStackQueuedSpinLock(KLOCK_QUEUE_HANDLE* lock_handle) {
 	auto value = next->lock->value.load(hz::memory_order::relaxed);
 	value &= ~1;
 	next->lock->value.store(value, hz::memory_order::relaxed);
+}
+
+NTAPI void KeAcquireInStackQueuedSpinLock(KSPIN_LOCK* lock, KLOCK_QUEUE_HANDLE* lock_handle) {
+	lock_handle->old_irql = KfRaiseIrql(DISPATCH_LEVEL);
+	KeAcquireInStackQueuedSpinLockAtDpcLevel(lock, lock_handle);
+}
+
+NTAPI void KeReleaseInStackQueuedSpinLock(KLOCK_QUEUE_HANDLE* lock_handle) {
+	auto old_irql = lock_handle->old_irql;
+	KeReleaseInStackQueuedSpinLockFromDpcLevel(lock_handle);
+	KeLowerIrql(old_irql);
 }

@@ -1,6 +1,16 @@
 #include "event.hpp"
 #include "arch/irql.hpp"
 #include "wait.hpp"
+#include "rtl.hpp"
+
+NTAPI extern "C" OBJECT_TYPE* ExEventObjectType = nullptr;
+
+void event_init() {
+	UNICODE_STRING name = RTL_CONSTANT_STRING(u"Event Object");
+	OBJECT_TYPE_INITIALIZER init {};
+	auto status = ObCreateObjectType(&name, &init, nullptr, &ExEventObjectType);
+	assert(NT_SUCCESS(status));
+}
 
 void KeInitializeEvent(KEVENT* event, EVENT_TYPE type, BOOLEAN state) {
 	event->header.type = static_cast<u8>(type);
@@ -48,4 +58,9 @@ void KeClearEvent(KEVENT* event) {
 LONG KeResetEvent(KEVENT* event) {
 	return reinterpret_cast<hz::atomic<i32>*>(
 		&event->header.signal_state)->exchange(0, hz::memory_order::acquire);
+}
+
+NTAPI LONG KeReadStateEvent(KEVENT* event) {
+	return reinterpret_cast<hz::atomic<i32>*>(
+		&event->header.signal_state)->load(hz::memory_order::relaxed);
 }

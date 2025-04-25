@@ -4,6 +4,7 @@
 #include "assert.hpp"
 #include "cstring.hpp"
 #include "mem/vspace.hpp"
+#include "arch/arch_syscall.hpp"
 
 struct BaseRelocEntry {
 	u32 page_rva;
@@ -40,18 +41,16 @@ struct ExportDirectory {
 	u32 ordinal_table_rva;
 };
 
-extern "C" DosHeader __ImageBase;
-
-static void* resolve_name(hz::string_view name) {
-	auto* hdr = offset(&__ImageBase, const PeHeader64*, __ImageBase.e_lfanew);
+static void* resolve_name(DosHeader* dos_hdr, hz::string_view name) {
+	auto* hdr = offset(dos_hdr, const PeHeader64*, dos_hdr->e_lfanew);
 	auto data_dir = hdr->opt.data_dirs[IMAGE_DIRECTORY_ENTRY_EXPORT];
 	if (!data_dir.size) {
 		return nullptr;
 	}
 
-	auto* dir = offset(&__ImageBase, const ExportDirectory*, data_dir.virt_addr);
+	auto* dir = offset(dos_hdr, const ExportDirectory*, data_dir.virt_addr);
 
-	auto* addr_table = offset(&__ImageBase, const u32*, dir->export_addr_table_rva);
+	auto* addr_table = offset(dos_hdr, const u32*, dir->export_addr_table_rva);
 
 	// by ordinal
 	u32 rva;
@@ -67,12 +66,12 @@ static void* resolve_name(hz::string_view name) {
 		rva = addr_table[unbiased_ordinal];
 	}
 	else {
-		auto* name_ptrs = offset(&__ImageBase, const u32*, dir->name_ptr_rva);
-		auto* ordinals = offset(&__ImageBase, const u16*, dir->ordinal_table_rva);
+		auto* name_ptrs = offset(dos_hdr, const u32*, dir->name_ptr_rva);
+		auto* ordinals = offset(dos_hdr, const u16*, dir->ordinal_table_rva);
 
 		bool found = false;
 		for (u32 i = 0; i < dir->num_of_name_ptrs; ++i) {
-			auto* cur_name = offset(&__ImageBase, const char*, name_ptrs[i]);
+			auto* cur_name = offset(dos_hdr, const char*, name_ptrs[i]);
 			if (cur_name == name) {
 				u16 offset = ordinals[i];
 				rva = addr_table[offset];
@@ -86,8 +85,10 @@ static void* resolve_name(hz::string_view name) {
 		}
 	}
 
-	return offset(&__ImageBase, void*, rva);
+	return offset(dos_hdr, void*, rva);
 }
+
+extern "C" DosHeader __ImageBase;
 
 hz::result<LoadedPe, int> pe_load(Process* process, std::shared_ptr<VNode>& file, bool user) {
 	usize size;
@@ -164,6 +165,7 @@ hz::result<LoadedPe, int> pe_load(Process* process, std::shared_ptr<VNode>& file
 				reinterpret_cast<void*>(image_base),
 				image_size,
 				PageFlags::Read | PageFlags::Write,
+				MappingFlags::Backed,
 				&mapping);
 		}
 		else {
@@ -180,6 +182,7 @@ hz::result<LoadedPe, int> pe_load(Process* process, std::shared_ptr<VNode>& file
 				nullptr,
 				image_size,
 				PageFlags::Read | PageFlags::Write,
+				MappingFlags::Backed,
 				&mapping);
 		}
 		else {
@@ -204,11 +207,8 @@ hz::result<LoadedPe, int> pe_load(Process* process, std::shared_ptr<VNode>& file
 		PeSectionHeader sect {};
 		memcpy(&sect, offset(mapping.data(), void*, sect_offset + i * sizeof(PeSectionHeader)), sizeof(PeSectionHeader));
 
-		if (sect.characteristics & IMAGE_SCN_MEM_DISCARDABLE) {
-			continue;
-		}
-
-		assert(sect.ptr_to_raw_data + sect.size_of_raw_data <= image_size);
+		assert(sect.virt_addr + sect.virt_size <= image_size);
+		assert(sect.ptr_to_raw_data + sect.size_of_raw_data <= size);
 
 		auto dest = offset(mapping.data(), void*, sect.virt_addr);
 
@@ -233,16 +233,19 @@ hz::result<LoadedPe, int> pe_load(Process* process, std::shared_ptr<VNode>& file
 			usize block_start = relocs->page_rva;
 
 			reloc_size -= sizeof(BaseRelocEntry);
-			size /= 2;
+			reloc_size /= 2;
 
 			auto* entry = reinterpret_cast<u16*>(&relocs[1]);
 
 			for (u32 j = 0; j < reloc_size; ++j) {
 				u8 type = entry[j] >> 12;
 				u16 offset = entry[j] & 0xFFF;
+				assert(block_start + offset <= image_size);
 				void* reloc_loc = offset(mapping.data(), void*, block_start + offset);
 
 				switch (type) {
+					case 0:
+						break;
 					case IMAGE_REL_BASED_LOW:
 						*static_cast<volatile u16*>(reloc_loc) += delta;
 						break;
@@ -263,6 +266,8 @@ hz::result<LoadedPe, int> pe_load(Process* process, std::shared_ptr<VNode>& file
 	}
 
 	if (!user && import_dir.size) {
+		bool unresolved_imports = false;
+
 		auto* imports = offset(mapping.data(), ImportEntry*, import_dir.virt_addr);
 		for (; imports->import_lookup_table_rva; ++imports) {
 			auto* lib_name = static_cast<const char*>(mapping.data()) + imports->name_rva;
@@ -275,14 +280,19 @@ hz::result<LoadedPe, int> pe_load(Process* process, std::shared_ptr<VNode>& file
 				}
 				else {
 					auto* name = static_cast<const char*>(mapping.data()) + (*entry & 0xFFFFFFFF) + 2;
-					auto resolved = resolve_name(name);
+					auto resolved = resolve_name(&__ImageBase, name);
 					if (!resolved) {
-						panic("[kernel][pe]: unresolved import '", name, "'");
+						unresolved_imports = true;
+						println("[kernel][pe]: unresolved import '", name, "' (", lib_name, ")");
 					}
 
 					*entry = reinterpret_cast<usize>(resolved);
 				}
 			}
+		}
+
+		if (unresolved_imports) {
+			panic("[kernel][pe]: file had unresolved imports");
 		}
 	}
 
@@ -314,10 +324,32 @@ hz::result<LoadedPe, int> pe_load(Process* process, std::shared_ptr<VNode>& file
 		}
 	}
 
-	mapping.ptr = nullptr;
+	if (!user) {
+		mapping.ptr = nullptr;
+	}
+
+	println("[kernel]: pe file loaded at offset 0x", Fmt::Hex, image_base - load_base, Fmt::Reset);
 
 	return hz::success(LoadedPe {
 		.base = load_base,
 		.entry = load_base + common_hdr.opt.addr_of_entry
 	});
 }
+
+void fill_ntdll_offsets(usize base) {
+	enable_user_access();
+	auto* hdr = reinterpret_cast<DosHeader*>(base);
+	NTDLL_OFFSETS.user_apc_dispatcher = reinterpret_cast<usize>(resolve_name(hdr, "KiUserApcDispatcher"));
+	assert(NTDLL_OFFSETS.user_apc_dispatcher);
+	NTDLL_OFFSETS.user_apc_dispatcher -= base;
+	NTDLL_OFFSETS.ldr_initialize_thunk = reinterpret_cast<usize>(resolve_name(hdr, "LdrInitializeThunk"));
+	assert(NTDLL_OFFSETS.ldr_initialize_thunk);
+	NTDLL_OFFSETS.ldr_initialize_thunk -= base;
+	disable_user_access();
+}
+
+void* pe_get_symbol_addr(LoadedPe* pe, kstd::string_view name) {
+	return resolve_name(reinterpret_cast<DosHeader*>(pe->base), name);
+}
+
+NtdllOffsets NTDLL_OFFSETS;

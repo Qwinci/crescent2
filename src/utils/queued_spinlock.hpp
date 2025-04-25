@@ -11,5 +11,7 @@ struct KLOCK_QUEUE_HANDLE {
 	KIRQL old_irql;
 };
 
+NTAPI extern "C" void KeAcquireInStackQueuedSpinLockAtDpcLevel(KSPIN_LOCK* lock, KLOCK_QUEUE_HANDLE* lock_handle);
+NTAPI extern "C" void KeReleaseInStackQueuedSpinLockFromDpcLevel(KLOCK_QUEUE_HANDLE* lock_handle);
 NTAPI extern "C" void KeAcquireInStackQueuedSpinLock(KSPIN_LOCK* lock, KLOCK_QUEUE_HANDLE* lock_handle);
 NTAPI extern "C" void KeReleaseInStackQueuedSpinLock(KLOCK_QUEUE_HANDLE* lock_handle);

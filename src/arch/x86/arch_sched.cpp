@@ -4,6 +4,10 @@
 #include "cpu.hpp"
 #include "mem/vspace.hpp"
 #include "simd_state.hpp"
+#include "arch/arch_irq.hpp"
+#include "sched/apc.hpp"
+
+asm(".intel_syntax noprefix");
 
 asm(R"(
 .pushsection .text
@@ -61,7 +65,7 @@ sched_switch_thread:
 )");
 
 void sched_before_switch(Thread* prev, Thread* thread) {
-	if (prev->process->user) {
+	if (prev->user_stack_base) {
 		if (CPU_FEATURES.xsave) {
 			xsave(prev->simd, ~0);
 		}
@@ -74,7 +78,7 @@ void sched_before_switch(Thread* prev, Thread* thread) {
 	prev->saved_user_sp = cpu->tmp_syscall_reg;
 	cpu->tmp_syscall_reg = thread->saved_user_sp;
 
-	if (thread->process->user) {
+	if (thread->user_stack_base) {
 		if (CPU_FEATURES.xsave) {
 			xrstor(thread->simd, ~0);
 		}
@@ -110,8 +114,7 @@ struct InitFrame {
 
 struct UserInitFrame {
 	InitFrame kernel;
-	u64 rflags;
-	u64 rsp;
+	KTRAP_FRAME trap_frame;
 };
 
 namespace {
@@ -130,15 +133,14 @@ arch_on_first_switch:
 
 	ret
 
-.globl arch_on_first_switch_user
-arch_on_first_switch_user:
-	mov rbx, rcx
-	xor ecx, ecx
-	call arch_lower_irql
-	mov rdx, rbx
+.globl arch_return_to_user
+arch_return_to_user:
+	// skip pad
+	add rsp, 8
 
 	xor eax, eax
 	xor ebx, ebx
+	xor edx, edx
 	xor r8d, r8d
 	xor r9d, r9d
 	xor r10d, r10d
@@ -148,6 +150,12 @@ arch_on_first_switch_user:
 	xor r14d, r14d
 	xor r15d, r15d
 
+	pxor xmm0, xmm0
+	pxor xmm1, xmm1
+	pxor xmm2, xmm2
+	pxor xmm3, xmm3
+	pxor xmm4, xmm4
+	pxor xmm5, xmm5
 	pxor xmm6, xmm6
 	pxor xmm7, xmm7
 	pxor xmm8, xmm8
@@ -159,35 +167,49 @@ arch_on_first_switch_user:
 	pxor xmm14, xmm14
 	pxor xmm15, xmm15
 
-	pop rcx
-	add rsp, 8
-	pop r11
-	pop rsp
+	mov rcx, [rsp + 56]
+	add rsp, 360
 	swapgs
-	sysretq
+	iretq
 .popsection
 )");
 
 extern "C" void arch_on_first_switch();
-extern "C" void arch_on_first_switch_user();
+extern "C" void arch_return_to_user();
 
-ArchThread::ArchThread(void (*fn)(void*), void* arg, Process* process) {
+extern "C" [[gnu::used]] void arch_on_first_switch_user(void* arg) {
+	KeLowerIrql(APC_LEVEL);
+	deliver_user_start_apc(static_cast<KTRAP_FRAME*>(arg));
+	KeLowerIrql(PASSIVE_LEVEL);
+}
+
+// todo get rid of this, this is needed for stack alignment
+asm(R"(
+.pushsection .text
+.globl arch_on_first_switch_user_asm
+arch_on_first_switch_user_asm:
+	call arch_on_first_switch_user
+	ret
+.popsection
+)");
+
+extern "C" void arch_on_first_switch_user_asm(void* arg);
+
+ArchThread::ArchThread(void (*fn)(void*), void* arg, Process* process, bool user) {
 	kernel_stack_base = new u8[KERNEL_STACK_SIZE + PAGE_SIZE] {};
 	syscall_sp = kernel_stack_base + KERNEL_STACK_SIZE + PAGE_SIZE;
 	sp = kernel_stack_base + KERNEL_STACK_SIZE + PAGE_SIZE -
-		(process->user ? sizeof(UserInitFrame) : sizeof(InitFrame));
+		(user ? sizeof(UserInitFrame) : sizeof(InitFrame));
 	auto* frame = reinterpret_cast<InitFrame*>(sp);
-	frame->rcx = reinterpret_cast<u64>(arg);
 
 	KERNEL_PROCESS->page_map.protect(reinterpret_cast<u64>(kernel_stack_base), PageFlags::Read, CacheMode::WriteBack);
 
-	frame->rip = reinterpret_cast<u64>(fn);
-
-	if (process->user) {
+	if (user) {
 		user_stack_base = process->allocate(
 			nullptr,
 			USER_STACK_SIZE + PAGE_SIZE,
 			PageFlags::Read | PageFlags::Write,
+			MappingFlags::Backed,
 			nullptr);
 		assert(user_stack_base);
 
@@ -202,12 +224,22 @@ ArchThread::ArchThread(void (*fn)(void*), void* arg, Process* process) {
 		fx->fcw = 1 << 0 | 1 << 1 | 1 << 2 | 1 << 3 | 1 << 4 | 1 << 5 | 0b11 << 8;
 		fx->mxcsr = 0b1111110000000;
 
-		frame->on_first_switch = reinterpret_cast<u64>(arch_on_first_switch_user);
+		frame->on_first_switch = reinterpret_cast<u64>(arch_on_first_switch_user_asm);
+		frame->rip = reinterpret_cast<u64>(arch_return_to_user);
 		auto* user_frame = reinterpret_cast<UserInitFrame*>(frame);
-		user_frame->rflags = 0x202;
-		user_frame->rsp = user_stack_base + USER_STACK_SIZE + PAGE_SIZE;
+
+		user_frame->trap_frame.rip = reinterpret_cast<u64>(fn);
+		user_frame->trap_frame.seg_cs = 40 | 3;
+		user_frame->trap_frame.eflags = 0x202;
+		user_frame->trap_frame.rsp = user_stack_base + USER_STACK_SIZE + PAGE_SIZE;
+		user_frame->trap_frame.seg_ss = 32 | 3;
+		user_frame->trap_frame.rcx = reinterpret_cast<u64>(arg);
+
+		frame->rcx = reinterpret_cast<u64>(&user_frame->trap_frame);
 	}
 	else {
+		frame->rcx = reinterpret_cast<u64>(arg);
+		frame->rip = reinterpret_cast<u64>(fn);
 		frame->on_first_switch = reinterpret_cast<u64>(arch_on_first_switch);
 	}
 }

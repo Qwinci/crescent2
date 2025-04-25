@@ -55,9 +55,11 @@ bool PageMap::map_2mb(u64 virt, u64 phys, PageFlags flags, CacheMode cache_mode)
 		case CacheMode::Uncached:
 			real_flags |= FLAG_WT | FLAG_CD;
 			break;
+		case CacheMode::None:
+			panic("[kernel][x86]: invalid cache mode");
 	}
 
-	auto guard = lock.lock();
+	auto old = KeAcquireSpinLockRaiseToDpc(&lock);
 
 	u64* level1;
 	if (level0[level0_index] & FLAG_PRESENT) {
@@ -66,6 +68,7 @@ bool PageMap::map_2mb(u64 virt, u64 phys, PageFlags flags, CacheMode cache_mode)
 	else {
 		u64 page_phys = pmalloc();
 		if (!page_phys) {
+			KeReleaseSpinLock(&lock, old);
 			return false;
 		}
 		if (!EARLY_PMALLOC) {
@@ -84,6 +87,7 @@ bool PageMap::map_2mb(u64 virt, u64 phys, PageFlags flags, CacheMode cache_mode)
 	else {
 		u64 page_phys = pmalloc();
 		if (!page_phys) {
+			KeReleaseSpinLock(&lock, old);
 			return false;
 		}
 		if (!EARLY_PMALLOC) {
@@ -97,6 +101,7 @@ bool PageMap::map_2mb(u64 virt, u64 phys, PageFlags flags, CacheMode cache_mode)
 
 	level2[level2_index] = phys | real_flags;
 
+	KeReleaseSpinLock(&lock, old);
 	return true;
 }
 
@@ -138,9 +143,11 @@ bool PageMap::map(u64 virt, u64 phys, PageFlags flags, CacheMode cache_mode) {
 		case CacheMode::Uncached:
 			real_flags |= FLAG_WT | FLAG_CD;
 			break;
+		case CacheMode::None:
+			panic("[kernel][x86]: invalid cache mode");
 	}
 
-	auto guard = lock.lock();
+	auto old = KeAcquireSpinLockRaiseToDpc(&lock);
 
 	u64* level1;
 	if (level0[level0_index] & FLAG_PRESENT) {
@@ -149,6 +156,7 @@ bool PageMap::map(u64 virt, u64 phys, PageFlags flags, CacheMode cache_mode) {
 	else {
 		u64 page_phys = pmalloc();
 		if (!page_phys) {
+			KeReleaseSpinLock(&lock, old);
 			return false;
 		}
 		if (!EARLY_PMALLOC) {
@@ -167,6 +175,7 @@ bool PageMap::map(u64 virt, u64 phys, PageFlags flags, CacheMode cache_mode) {
 	else {
 		u64 page_phys = pmalloc();
 		if (!page_phys) {
+			KeReleaseSpinLock(&lock, old);
 			return false;
 		}
 		if (!EARLY_PMALLOC) {
@@ -185,6 +194,7 @@ bool PageMap::map(u64 virt, u64 phys, PageFlags flags, CacheMode cache_mode) {
 	else {
 		u64 page_phys = pmalloc();
 		if (!page_phys) {
+			KeReleaseSpinLock(&lock, old);
 			return false;
 		}
 		if (!EARLY_PMALLOC) {
@@ -198,6 +208,7 @@ bool PageMap::map(u64 virt, u64 phys, PageFlags flags, CacheMode cache_mode) {
 
 	level3[level3_index] = phys | real_flags;
 
+	KeReleaseSpinLock(&lock, old);
 	return true;
 }
 
@@ -212,13 +223,14 @@ void PageMap::unmap(u64 virt) {
 	virt >>= 9;
 	u64 level0_index = virt & 0x1FF;
 
-	auto guard = lock.lock();
+	auto old = KeAcquireSpinLockRaiseToDpc(&lock);
 
 	u64* level1;
 	if (level0[level0_index] & FLAG_PRESENT) {
 		level1 = to_virt<u64>(level0[level0_index] & PAGE_ADDR_MASK);
 	}
 	else {
+		KeReleaseSpinLock(&lock, old);
 		return;
 	}
 
@@ -227,6 +239,7 @@ void PageMap::unmap(u64 virt) {
 		level2 = to_virt<u64>(level1[level1_index] & PAGE_ADDR_MASK);
 	}
 	else {
+		KeReleaseSpinLock(&lock, old);
 		return;
 	}
 
@@ -234,18 +247,21 @@ void PageMap::unmap(u64 virt) {
 	if (level2[level2_index] & FLAG_PRESENT) {
 		if (level2[level2_index] & FLAG_HUGE) {
 			// todo 2mb huge page
+			KeReleaseSpinLock(&lock, old);
 			return;
 		}
 
 		level3 = to_virt<u64>(level2[level2_index] & PAGE_ADDR_MASK);
 	}
 	else {
+		KeReleaseSpinLock(&lock, old);
 		return;
 	}
 
 	level3[level3_index] = 0;
 	orig_virt &= ~0xFFF;
 	asm volatile("invlpg [%0]" : : "r"(orig_virt) : "memory");
+	KeReleaseSpinLock(&lock, old);
 }
 
 u64 PageMap::get_phys(u64 virt) {
@@ -259,13 +275,14 @@ u64 PageMap::get_phys(u64 virt) {
 	virt >>= 9;
 	u64 level0_index = virt & 0x1FF;
 
-	auto guard = lock.lock();
+	auto old = KeAcquireSpinLockRaiseToDpc(&lock);
 
 	u64* level1;
 	if (level0[level0_index] & FLAG_PRESENT) {
 		level1 = to_virt<u64>(level0[level0_index] & PAGE_ADDR_MASK);
 	}
 	else {
+		KeReleaseSpinLock(&lock, old);
 		return 0;
 	}
 
@@ -274,22 +291,28 @@ u64 PageMap::get_phys(u64 virt) {
 		level2 = to_virt<u64>(level1[level1_index] & PAGE_ADDR_MASK);
 	}
 	else {
+		KeReleaseSpinLock(&lock, old);
 		return 0;
 	}
 
 	u64* level3;
 	if (level2[level2_index] & FLAG_PRESENT) {
 		if (level2[level2_index] & FLAG_HUGE) {
-			return (level2[level2_index] & PAGE_ADDR_MASK) | (orig_virt & 0x1FFFFF);
+			auto addr = (level2[level2_index] & PAGE_ADDR_MASK) | (orig_virt & 0x1FFFFF);
+			KeReleaseSpinLock(&lock, old);
+			return addr;
 		}
 
 		level3 = to_virt<u64>(level2[level2_index] & PAGE_ADDR_MASK);
 	}
 	else {
+		KeReleaseSpinLock(&lock, old);
 		return 0;
 	}
 
-	return (level3[level3_index] & PAGE_ADDR_MASK) | (orig_virt & 0xFFF);
+	auto addr = (level3[level3_index] & PAGE_ADDR_MASK) | (orig_virt & 0xFFF);
+	KeReleaseSpinLock(&lock, old);
+	return addr;
 }
 
 void PageMap::protect(u64 virt, PageFlags flags, CacheMode cache_mode) {
@@ -319,9 +342,11 @@ void PageMap::protect(u64 virt, PageFlags flags, CacheMode cache_mode) {
 		case CacheMode::Uncached:
 			real_flags |= FLAG_WT | FLAG_CD;
 			break;
+		case CacheMode::None:
+			panic("[kernel][x86]: invalid cache mode");
 	}
 
-	auto guard = lock.lock();
+	auto old = KeAcquireSpinLockRaiseToDpc(&lock);
 
 	auto orig_virt = virt;
 	virt >>= 12;
@@ -338,6 +363,7 @@ void PageMap::protect(u64 virt, PageFlags flags, CacheMode cache_mode) {
 		level1 = to_virt<u64>(level0[level0_index] & PAGE_ADDR_MASK);
 	}
 	else {
+		KeReleaseSpinLock(&lock, old);
 		return;
 	}
 
@@ -346,6 +372,7 @@ void PageMap::protect(u64 virt, PageFlags flags, CacheMode cache_mode) {
 		level2 = to_virt<u64>(level1[level1_index] & PAGE_ADDR_MASK);
 	}
 	else {
+		KeReleaseSpinLock(&lock, old);
 		return;
 	}
 
@@ -353,12 +380,14 @@ void PageMap::protect(u64 virt, PageFlags flags, CacheMode cache_mode) {
 	if (level2[level2_index] & FLAG_PRESENT) {
 		if (level2[level2_index] & FLAG_HUGE) {
 			// todo 2mb huge page
+			KeReleaseSpinLock(&lock, old);
 			return;
 		}
 
 		level3 = to_virt<u64>(level2[level2_index] & PAGE_ADDR_MASK);
 	}
 	else {
+		KeReleaseSpinLock(&lock, old);
 		return;
 	}
 
@@ -367,11 +396,11 @@ void PageMap::protect(u64 virt, PageFlags flags, CacheMode cache_mode) {
 
 	orig_virt &= ~0xFFF;
 	asm volatile("invlpg [%0]" : : "r"(orig_virt) : "memory");
+
+	KeReleaseSpinLock(&lock, old);
 }
 
 void PageMap::use() {
-	auto guard = lock.lock();
-
 	auto phys = to_phys(level0);
 	asm volatile("mov cr3, %0" : : "r"(phys) : "memory");
 }
@@ -398,7 +427,7 @@ PageMap::~PageMap() {
 }
 
 void PageMap::fill_high_half() {
-	for (int i = 0; i < 512; ++i) {
+	for (int i = 256; i < 512; ++i) {
 		auto phys = pmalloc();
 		assert(phys);
 		memset(to_virt<void>(phys), 0, PAGE_SIZE);

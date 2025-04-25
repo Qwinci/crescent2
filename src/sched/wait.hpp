@@ -5,14 +5,9 @@
 #include "dpc.hpp"
 #include "dispatch_header.hpp"
 
-enum class WaitType : u8 {
-	All = 0,
-	Any = 1
-};
-
 struct KWAIT_BLOCK {
 	LIST_ENTRY wait_list_entry;
-	WaitType wait_type;
+	WAIT_TYPE wait_type;
 	volatile u8 block_state;
 	u16 wait_key;
 	u32 spare;
@@ -24,8 +19,14 @@ struct KWAIT_BLOCK {
 	void* spare_ptr;
 };
 
-enum class KWAIT_REASON {
-	Executive
+enum KWAIT_REASON {
+	Executive,
+	FreePage,
+	PageIn,
+	PoolAllocation,
+	DelayExecution,
+	Suspended,
+	UserRequest
 };
 
 void dispatch_header_queue_one_waiter(DISPATCHER_HEADER* header) REQUIRES(header);
@@ -33,7 +34,7 @@ void dispatch_header_queue_all_waiters(DISPATCHER_HEADER* header) REQUIRES(heade
 NTAPI extern "C" NTSTATUS KeWaitForMultipleObjects(
 	u32 count,
 	void* objects[],
-	WaitType type,
+	WAIT_TYPE type,
 	KWAIT_REASON wait_reason,
 	KPROCESSOR_MODE wait_mode,
 	bool alertable,
@@ -45,3 +46,14 @@ NTAPI extern "C" NTSTATUS KeWaitForSingleObject(
 	KPROCESSOR_MODE wait_mode,
 	bool alertable,
 	i64* timeout);
+
+NTAPI extern "C" NTSTATUS NtWaitForMultipleObjects(
+	ULONG object_count,
+	PHANDLE object_array,
+	WAIT_TYPE wait_type,
+	BOOLEAN alertable,
+	PLARGE_INTEGER timeout);
+NTAPI extern "C" NTSTATUS NtWaitForSingleObject(
+	HANDLE handle,
+	BOOLEAN alertable,
+	PLARGE_INTEGER timeout);

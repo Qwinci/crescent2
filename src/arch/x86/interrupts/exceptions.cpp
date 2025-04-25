@@ -119,14 +119,16 @@ extern "C" [[gnu::used]] bool x86_pagefault_handler(KEXCEPTION_FRAME* ex_frame) 
 
 	backtrace_display();
 
-	CONTEXT ctx {};
-	ctx.context_flags = CONTEXT_FULL;
-	ctx.context_flags |= CONTEXT_SEGMENTS;
-	trap_frame_to_context(frame, ex_frame, &ctx);
-	EXCEPTION_RECORD record {};
-	record.exception_code = STATUS_ACCESS_VIOLATION;
-	record.exception_addr = reinterpret_cast<PVOID>(cr2);
-	RtlUnwindExInternal(nullptr, nullptr, &record, nullptr, &ctx, nullptr, UNW_FLAG_EHANDLER);
+	if (frame->previous_mode == KernelMode) {
+		CONTEXT ctx {};
+		ctx.context_flags = CONTEXT_FULL;
+		ctx.context_flags |= CONTEXT_SEGMENTS;
+		trap_frame_to_context(frame, ex_frame, &ctx);
+		EXCEPTION_RECORD record {};
+		record.exception_code = STATUS_ACCESS_VIOLATION;
+		record.exception_addr = reinterpret_cast<PVOID>(cr2);
+		RtlUnwindExInternal(nullptr, nullptr, &record, nullptr, &ctx, nullptr, UNW_FLAG_EHANDLER);
+	}
 
 	while (true) {
 		asm volatile("hlt");

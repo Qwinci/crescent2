@@ -3,8 +3,8 @@
 #include "mem/mem.hpp"
 #include "assert.hpp"
 #include "ntdef.h"
+#include "cstring.hpp"
 #include <hz/array.hpp>
-#include <hz/spinlock.hpp>
 
 template<usize N>
 struct SlabAllocator {
@@ -187,11 +187,35 @@ NTAPI void* ExAllocatePool2(POOL_FLAGS flags, size_t num_of_bytes, ULONG tag) {
 		return nullptr;
 	}
 	*ptr = num_of_bytes;
+	memset(ptr + 2, 0, num_of_bytes);
 	return &ptr[2];
 }
 
+NTAPI void* ExAllocatePoolWithTag(POOL_TYPE pool_type, size_t num_of_bytes, ULONG tag) {
+	auto* ptr = static_cast<usize*>(kmalloc(num_of_bytes + sizeof(usize) * 2));
+	assert(reinterpret_cast<usize>(ptr) % 16 == 0);
+	if (!ptr) {
+		return nullptr;
+	}
+	*ptr = num_of_bytes;
+	memset(ptr + 2, 0, num_of_bytes);
+	return &ptr[2];
+}
+
+NTAPI void* ExAllocatePoolWithQuotaTag(POOL_TYPE pool_type, size_t num_of_bytes, ULONG tag) {
+	return ExAllocatePool2(0, num_of_bytes, tag);
+}
+
 NTAPI void ExFreePool(void* ptr) {
+	if (!ptr) {
+		return;
+	}
+
 	auto* p = static_cast<usize*>(ptr);
 	auto size = *(p - 2);
-	kfree(p - 2, size);
+	kfree(p - 2, size + sizeof(usize) * 2);
+}
+
+NTAPI void ExFreePoolWithTag(void* ptr, ULONG tag) {
+	ExFreePool(ptr);
 }

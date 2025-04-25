@@ -4,6 +4,7 @@
 #include "arch/cpu.hpp"
 #include "arch/x86/cpu.hpp"
 #include "x86/irq.hpp"
+#include "dev/irq.hpp"
 
 namespace regs {
 	static constexpr BasicRegister<u32> TPR {0x80};
@@ -60,7 +61,7 @@ namespace {
 	IoSpace SPACE {};
 	u32 TMP_IRQ {};
 	u32 TIMER_IRQ {};
-	IrqHandler LAPIC_IRQ_HANDLER {
+	KINTERRUPT LAPIC_IRQ_HANDLER {
 		.fn = &LapicTickSource::on_irq,
 		.can_be_shared = false
 	};
@@ -69,13 +70,14 @@ namespace {
 static void lapic_timer_calibrate(Cpu* cpu, bool initial) {
 	SPACE.store(regs::DIVIDE_CONFIG, divide_config::DIV_BY_16);
 
-	IrqHandler tmp_handler {
+	KINTERRUPT tmp_handler {
 		.fn = [](KINTERRUPT*, void*) {
 			return true;
 		},
 		.can_be_shared = false
 	};
-	register_irq_handler(TMP_IRQ, &tmp_handler);
+	tmp_handler.vector = TMP_IRQ;
+	register_irq_handler(&tmp_handler);
 
 	SPACE.store(
 		regs::LVT_TIMER,
@@ -101,7 +103,7 @@ static void lapic_timer_calibrate(Cpu* cpu, bool initial) {
 	}
 
 	SPACE.store(regs::DIVIDE_CONFIG, divide_config::DIV_BY_16);
-	deregister_irq_handler(TMP_IRQ, &tmp_handler);
+	deregister_irq_handler(&tmp_handler);
 }
 
 void lapic_first_init() {
@@ -113,7 +115,8 @@ void lapic_first_init() {
 	TMP_IRQ = x86_alloc_irq(1, CLOCK_LEVEL, false);
 	assert(TMP_IRQ);
 
-	register_irq_handler(TIMER_IRQ, &LAPIC_IRQ_HANDLER);
+	LAPIC_IRQ_HANDLER.vector = TIMER_IRQ;
+	register_irq_handler(&LAPIC_IRQ_HANDLER);
 }
 
 void lapic_init(Cpu* cpu, bool initial) {

@@ -16,3 +16,8 @@ NTAPI extern "C" void KeInitializeEvent(KEVENT* event, EVENT_TYPE type, BOOLEAN 
 NTAPI extern "C" LONG KeSetEvent(KEVENT* event, KPRIORITY increment, BOOLEAN wait);
 NTAPI extern "C" void KeClearEvent(KEVENT* event);
 NTAPI extern "C" LONG KeResetEvent(KEVENT* event);
+NTAPI extern "C" LONG KeReadStateEvent(KEVENT* event);
+
+struct OBJECT_TYPE;
+
+NTAPI extern "C" OBJECT_TYPE* ExEventObjectType;

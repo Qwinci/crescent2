@@ -15,3 +15,7 @@ void call_constructors() {
 }
 
 extern "C" void atexit(void (*)()) {}
+
+NTAPI extern "C" size_t __chkstk(size_t needed_stack_space) {
+	return needed_stack_space;
+}

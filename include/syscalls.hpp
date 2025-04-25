@@ -1,0 +1,10 @@
+#pragma once
+
+#define SYS_ALLOCATE_VIRTUAL_MEMORY 0
+#define SYS_FREE_VIRTUAL_MEMORY 1
+#define SYS_PROTECT_VIRTUAL_MEMORY 2
+#define SYS_OPEN_FILE 3
+#define SYS_READ_FILE 4
+#define SYS_CLOSE 5
+#define SYS_CONTINUE 6
+#define SYS_MAX 7

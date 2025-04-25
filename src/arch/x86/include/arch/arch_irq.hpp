@@ -45,7 +45,7 @@ struct alignas(16) XMM_SAVE_AREA32 {
 #define CONTEXT_XSTATE (CONTEXT_AMD64 | 0x40)
 #define CONTEXT_KERNEL_CET (CONTEXT_AMD64 | 0x80)
 
-struct CONTEXT {
+struct alignas(16) CONTEXT {
 	ULONG64 p1_home;
 	ULONG64 p2_home;
 	ULONG64 p3_home;

@@ -81,4 +81,4 @@ struct CpuFeatures {
 };
 static_assert(offsetof(CpuFeatures, smap) == 14);
 
-extern CpuFeatures CPU_FEATURES;
+extern "C" CpuFeatures CPU_FEATURES;

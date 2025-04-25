@@ -10,7 +10,7 @@ struct Cpu : public ArchCpu {
 	constexpr explicit Cpu(u32 number) : ArchCpu {number} {}
 
 	Scheduler scheduler {this};
-	Thread idle_thread {u"idle", this, &*KERNEL_PROCESS, sched_idle_fn, nullptr};
+	Thread idle_thread {u"idle", this, &*KERNEL_PROCESS, false, sched_idle_fn, nullptr};
 	u64 cycles_per_clock_interval {};
 	SINGLE_LIST_ENTRY dpc_list_head {};
 	SINGLE_LIST_ENTRY* dpc_list_tail {};

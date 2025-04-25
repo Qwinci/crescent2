@@ -40,6 +40,9 @@ public:
 	inline Log& operator<<(u32 value) {
 		return operator<<(static_cast<usize>(value));
 	}
+	inline Log& operator<<(unsigned long value) {
+		return operator<<(static_cast<usize>(value));
+	}
 	inline Log& operator<<(i8 value) {
 		return operator<<(static_cast<isize>(value));
 	}

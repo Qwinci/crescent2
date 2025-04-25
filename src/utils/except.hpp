@@ -43,8 +43,9 @@ extern "C" int _abnormal_termination();
 #define GetExceptionInformation() ((EXCEPTION_POINTERS*) _exception_info())
 #define AbnormalTermination _abnormal_termination
 
-[[gnu::noinline, noreturn]] void RtlRaiseStatus(NTSTATUS status);
-[[gnu::noinline, noreturn]] void RtlRaiseException(EXCEPTION_RECORD* exception_record);
+NTAPI extern "C" [[gnu::noinline, noreturn]] void RtlRaiseStatus(NTSTATUS status);
+NTAPI extern "C" [[gnu::noinline, noreturn]] void RtlRaiseException(EXCEPTION_RECORD* exception_record);
 
-extern "C" NTAPI void ExRaiseDatatypeMisalignment();
-extern "C" NTAPI void ExRaiseAccessViolation();
+NTAPI extern "C" void ExRaiseDatatypeMisalignment();
+NTAPI extern "C" void ExRaiseAccessViolation();
+NTAPI extern "C" void ExRaiseStatus(NTSTATUS status);

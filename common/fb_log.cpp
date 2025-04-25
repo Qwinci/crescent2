@@ -24,6 +24,7 @@ FbLog::~FbLog() {
 
 void FbLog::write(hz::string_view str) {
 	for (auto c : str) {
+		asm volatile("out 0xE9, %0" : : "a"(c));
 		if (c == '\n') {
 			column = 0;
 			++row;
@@ -39,6 +40,7 @@ void FbLog::write(hz::string_view str) {
 			++row;
 		}
 		if (row * LINE_HEIGHT * scale >= height) {
+			continue;
 			column = 0;
 			row = 0;
 			clear();
