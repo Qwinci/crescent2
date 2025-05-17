@@ -1,7 +1,9 @@
 #pragma once
 #include "types.hpp"
 
-static inline void arch_hlt() {
+// this is marked as always inline because it's a single instruction and
+// if it is a function with only one instruction it's not properly unwound by gdb
+[[gnu::always_inline]] static inline void arch_hlt() {
 	asm volatile("hlt");
 }
 

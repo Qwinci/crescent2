@@ -17,3 +17,5 @@ inline usize to_phys(T* ptr) {
 #define ALIGNDOWN(value, align) ((value) & ~((align) - 1))
 
 #define PAGE_SIZE 0x1000
+
+extern usize HHDM_END;

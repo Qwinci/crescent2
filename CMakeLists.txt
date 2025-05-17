@@ -67,7 +67,7 @@ target_link_options(crescent PRIVATE
 	-Wl,/entry:_start,/base:0xFFFFFFFF80000000,/ignore:longsections
 )
 
-target_link_libraries(crescent PRIVATE common_elf hzutils)
+target_link_libraries(crescent PRIVATE common hzutils)
 
 add_subdirectory(src)
 
