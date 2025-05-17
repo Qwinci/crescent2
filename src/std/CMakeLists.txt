@@ -5,6 +5,7 @@ target_sources(crescent PRIVATE
 	stdio.cpp
 	cxx.cpp
 	list.cpp
+	paged_list.cpp
 	rand.cpp
 	wchar.cpp
 )
