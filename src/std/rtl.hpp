@@ -111,6 +111,9 @@ struct TIME_FIELDS {
 	CSHORT weekday;
 };
 
+NTAPI extern "C" BOOLEAN RtlTimeFieldsToTime(
+	TIME_FIELDS* time_fields,
+	PLARGE_INTEGER time);
 NTAPI extern "C" void RtlTimeToTimeFields(
 	PLARGE_INTEGER time,
 	TIME_FIELDS* time_fields);

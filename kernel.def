@@ -150,6 +150,7 @@ EXPORTS
 	RtlNumberOfClearBits
 	RtlNumberOfSetBits
 
+	RtlTimeFieldsToTime
 	RtlTimeToTimeFields
 
 	RtlCheckRegistryKey

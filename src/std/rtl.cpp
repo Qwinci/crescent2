@@ -759,6 +759,31 @@ namespace {
 	constexpr int TICKS_IN_MS = 10000;
 }
 
+NTAPI BOOLEAN RtlTimeFieldsToTime(TIME_FIELDS* time_fields, PLARGE_INTEGER time) {
+	i64 value = 0;
+	value += time_fields->milliseconds * static_cast<i64>(NS_IN_MS / 100);
+	value += time_fields->second * static_cast<i64>(NS_IN_S / 100);
+	value += time_fields->minute * static_cast<i64>(NS_IN_S / 100 * 60);
+	value += time_fields->hour * static_cast<i64>(NS_IN_S / 100 * 60 * 60);
+	value += (time_fields->day - 1) * static_cast<i64>(NS_IN_S / 100 * 60 * 60 * 24);
+
+	auto table = get_days_per_month_table(time_fields->year);
+	for (CSHORT i = 1; i < time_fields->month; ++i) {
+		auto days = table[i];
+		value += days * static_cast<i64>(NS_IN_S / 100 * 60 * 60 * 24);
+	}
+
+	assert(time_fields->year >= EPOCH_YEAR);
+	for (CSHORT i = EPOCH_YEAR; i < time_fields->year; ++i) {
+		auto days = days_per_year(i);
+		value += days * static_cast<i64>(NS_IN_S / 100 * 60 * 60 * 24);
+	}
+
+	time->QuadPart = value;
+
+	return true;
+}
+
 NTAPI void RtlTimeToTimeFields(
 	PLARGE_INTEGER time,
 	TIME_FIELDS* time_fields) {
@@ -782,8 +807,22 @@ NTAPI void RtlTimeToTimeFields(
 		}
 	}
 
+	CSHORT month = 1;
+	auto table = get_days_per_month_table(year);
+	for (CSHORT i = 0; i < 12; ++i) {
+		auto days = table[i];
+		if (days_since_epoch >= days) {
+			days_since_epoch -= days;
+			++month;
+		}
+		else {
+			break;
+		}
+	}
+
 	time_fields->year = year;
-	time_fields->day = static_cast<CSHORT>(days_since_epoch);
+	time_fields->month = month;
+	time_fields->day = static_cast<CSHORT>(days_since_epoch + 1);
 	time_fields->hour = static_cast<CSHORT>(seconds / 60 / 60 % 24);
 	time_fields->minute = static_cast<CSHORT>(seconds / 60 % 60);
 	time_fields->second = static_cast<CSHORT>(seconds % 60);
