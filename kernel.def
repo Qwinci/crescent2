@@ -33,6 +33,8 @@ EXPORTS
 	ExInitializePagedLookasideList
 	ExDeletePagedLookasideList
 
+	ExSystemTimeToLocalTime
+
 	HalGetBusDataByOffset
 	HalSetBusDataByOffset
 
@@ -107,6 +109,8 @@ EXPORTS
 
 	KeQueryMaximumProcessorCount
 	KeNumberProcessors
+
+	KeQueryTimeIncrement
 
 	RtlCaptureContext
 	RtlLookupFunctionEntry

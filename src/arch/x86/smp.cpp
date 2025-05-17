@@ -300,5 +300,6 @@ void x86_smp_init() {
 		});
 	}
 
+	system_time_init();
 	CPUS[0]->tick_source->oneshot(Scheduler::CLOCK_INTERVAL_MS * 1000);
 }
