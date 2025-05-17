@@ -1,5 +1,9 @@
 #include "clock.hpp"
 #include "stdio.hpp"
+#include "utils/shared_data.hpp"
+#include "atomic.hpp"
+#include "rtl.hpp"
+#include "assert.hpp"
 
 ClockSource* CLOCK_SOURCE;
 DateTimeProvider* DATE_TIME_PROVIDER;
@@ -25,4 +29,29 @@ NTAPI void KeStallExecutionProcessor(ULONG us) {
 	auto start = CLOCK_SOURCE->get_ns();
 	auto end = start + us * NS_IN_US;
 	while (CLOCK_SOURCE->get_ns() < end);
+}
+
+void system_time_init() {
+	assert(DATE_TIME_PROVIDER);
+
+	DateTime date_time {};
+	auto status = DATE_TIME_PROVIDER->get_date_time(date_time);
+	assert(status == 0);
+
+	TIME_FIELDS fields {
+		.year = static_cast<CSHORT>(date_time.year),
+		.month = date_time.month,
+		.day = date_time.day,
+		.hour = date_time.hour,
+		.minute = date_time.minute,
+		.second = date_time.second,
+		.milliseconds = 0,
+		.weekday = 0
+	};
+
+	LARGE_INTEGER time {};
+	auto rtl_status = RtlTimeFieldsToTime(&fields, &time);
+	assert(rtl_status);
+
+	atomic_store(&SharedUserData->system_time.u64, static_cast<u64>(time.QuadPart), memory_order::relaxed);
 }

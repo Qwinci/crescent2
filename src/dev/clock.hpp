@@ -64,3 +64,5 @@ inline void mdelay(u64 ms) {
 NTAPI extern "C" LARGE_INTEGER KeQueryPerformanceCounter(PLARGE_INTEGER freq);
 
 NTAPI extern "C" void KeStallExecutionProcessor(ULONG us);
+
+void system_time_init();

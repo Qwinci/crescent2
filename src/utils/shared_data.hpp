@@ -1,10 +1,14 @@
 #pragma once
+
 #include "types.hpp"
 
-struct KSYSTEM_TIME {
-	u32 low_part;
-	i32 high1_time;
-	i32 high2_time;
+union KSYSTEM_TIME {
+	struct {
+		u32 low_part;
+		i32 high1_time;
+		i32 high2_time;
+	};
+	u64 u64;
 };
 
 #define PF_COMPARE_EXCHANGE_DOUBLE 2

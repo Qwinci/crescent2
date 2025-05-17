@@ -2,6 +2,8 @@
 #include "arch/cpu.hpp"
 #include "assert.hpp"
 #include "utils/thread_safety.hpp"
+#include "utils/shared_data.hpp"
+#include "atomic.hpp"
 #include <hz/bit.hpp>
 
 namespace {
@@ -237,6 +239,11 @@ void Scheduler::handle_quantum_end(Cpu* cpu) {
 
 void Scheduler::on_timer(Cpu* cpu) {
 	auto now = get_cycle_count();
+
+	if (cpu->number == 0) {
+		u64 ticks = Scheduler::CLOCK_INTERVAL_MS * (NS_IN_MS / 100);
+		atomic_fetch_add(&SharedUserData->system_time.u64, ticks, memory_order::relaxed);
+	}
 
 	auto current = cpu->current_thread;
 
