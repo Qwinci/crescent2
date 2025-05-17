@@ -100,7 +100,7 @@ add_custom_command(OUTPUT image.iso DEPENDS ${FILES} crescent
 if(NOT EXISTS "${CMAKE_BINARY_DIR}/limine")
 	execute_process(
 		COMMAND git clone https://github.com/limine-bootloader/limine
-		-b v8.x-binary --depth=1 "${CMAKE_BINARY_DIR}/limine"
+		-b v9.x-binary --depth=1 "${CMAKE_BINARY_DIR}/limine"
 	)
 	execute_process(COMMAND mkdir -p ${PROJECT_BINARY_DIR}/iso_root)
 	execute_process(COMMAND cmake -E copy_if_different
