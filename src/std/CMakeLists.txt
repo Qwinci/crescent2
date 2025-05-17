@@ -4,6 +4,7 @@ target_sources(crescent PRIVATE
 	ctype.cpp
 	stdio.cpp
 	cxx.cpp
+	list.cpp
 	rand.cpp
 	wchar.cpp
 )
