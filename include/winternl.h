@@ -2,14 +2,8 @@
 #define _WINTERNL_H
 
 #include "windef.h"
-
-#ifndef _NTDEF_H
-typedef struct _UNICODE_STRING {
-	USHORT Length;
-	USHORT MaximumLength;
-	PWSTR Buffer;
-} UNICODE_STRING, *PUNICODE_STRING, *const PCUNICODE_STRING;
-#endif
+#include "ntdef.h"
+#include "priv/peb.h"
 
 typedef LONG NTSTATUS;
 
