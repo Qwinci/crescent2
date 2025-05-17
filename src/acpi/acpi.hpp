@@ -14,6 +14,14 @@ namespace acpi {
 		u32 creator_revision;
 	};
 
+	struct [[gnu::packed]] Madt {
+		SdtHeader hdr;
+		u32 lapic_addr;
+		u32 flags;
+
+		static constexpr u32 FLAG_LEGACY_PIC = 1;
+	};
+
 	enum class RegionSpace : u8 {
 		SystemMemory = 0x0
 	};

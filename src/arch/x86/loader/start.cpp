@@ -184,6 +184,8 @@ extern "C" [[noreturn, gnu::used]] void early_start() {
 		max_phys_addr = hz::max(max_phys_addr, entry->base + entry->length);
 	}
 
+	HHDM_END = HHDM_START + max_phys_addr;
+
 	KERNEL_PROCESS.initialize(u"", false);
 	KERNEL_PROCESS->page_map.fill_high_half();
 

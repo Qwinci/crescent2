@@ -9,6 +9,7 @@ using KIRQL = u8;
 #define LOW_LEVEL 0
 #define APC_LEVEL 1
 #define DISPATCH_LEVEL 2
+#define DEVICE_LEVEL 3
 #define CLOCK_LEVEL 13
 #define IPI_LEVEL 14
 #define POWER_LEVEL 14

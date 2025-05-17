@@ -1,5 +1,6 @@
 target_include_directories(crescent PRIVATE include)
 target_sources(crescent PRIVATE
+	acpi/madt.cpp
 	arch_except.cpp
 	arch_sched.cpp
 	context.cpp

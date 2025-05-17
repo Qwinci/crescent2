@@ -1,7 +1,7 @@
 #include "smp.hpp"
 #include "dev/hpet.hpp"
 #include "dev/tsc.hpp"
-#include "acpi.hpp"
+#include "acpi/acpi.hpp"
 #include "mem/vspace.hpp"
 #include "utils/shared_data.hpp"
 #include "cstring.hpp"
@@ -26,6 +26,8 @@ void init_drivers() {
 	}
 }
 
+void x86_madt_parse();
+
 void arch_start(void* rsdp) {
 	auto info_page = KERNEL_VSPACE.alloc_backed(
 		reinterpret_cast<usize>(SharedUserData),
@@ -37,6 +39,7 @@ void arch_start(void* rsdp) {
 	hpet_init();
 	tsc_init();
 	x86_smp_init();
+	x86_madt_parse();
 
 	init_drivers();
 

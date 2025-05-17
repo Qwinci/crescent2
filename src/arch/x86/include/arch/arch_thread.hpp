@@ -5,7 +5,7 @@ struct Process;
 
 struct ArchThread {
 	ArchThread() = default;
-	ArchThread(void (*fn)(void*), void* arg, Process* process);
+	ArchThread(void (*fn)(void*), void* arg, Process* process, bool user);
 	~ArchThread();
 
 	ArchThread* self {this};

@@ -49,6 +49,8 @@ RtlRestoreContext:
 	.seh_stackalloc 40
 	.seh_endprologue
 
+	cli
+
 	// create irq frame
 	movzx eax, word ptr [rcx + CONTEXT_SEG_SS]
 	mov [rsp + 32], rax
@@ -58,6 +60,11 @@ RtlRestoreContext:
 	mov [rsp + 16], rax
 	movzx eax, word ptr [rcx + CONTEXT_SEG_CS]
 	mov [rsp + 8], rax
+	test eax, 3
+	jz skip_gs
+	swapgs
+
+skip_gs:
 	mov rax, [rcx + CONTEXT_RIP]
 	mov [rsp], rax
 
@@ -82,6 +89,7 @@ RtlRestoreContext:
 	mov r14, [rcx + CONTEXT_R14]
 	mov r15, [rcx + CONTEXT_R15]
 	fxrstor64 [rcx + CONTEXT_FLOAT]
+
 	mov rcx, [rcx + CONTEXT_RCX]
 
 	iretq

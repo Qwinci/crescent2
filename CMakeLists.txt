@@ -49,6 +49,9 @@ add_subdirectory(hzutils)
 add_executable(crescent
 	src/main.cpp
 )
+
+set_target_properties(crescent PROPERTIES LINK_DEPENDS ${CMAKE_SOURCE_DIR}/kernel.def)
+
 target_include_directories(crescent PRIVATE src src/std common include)
 target_compile_definitions(crescent PRIVATE NTAPI=__declspec\(dllexport\))
 
@@ -64,7 +67,7 @@ endif()
 
 target_link_options(crescent PRIVATE
 	-nostdlib
-	-Wl,/entry:_start,/base:0xFFFFFFFF80000000,/ignore:longsections
+	-Wl,/entry:_start,/base:0xFFFFFFFF80000000,/ignore:longsections,/def:${CMAKE_SOURCE_DIR}/kernel.def
 )
 
 target_link_libraries(crescent PRIVATE common hzutils)

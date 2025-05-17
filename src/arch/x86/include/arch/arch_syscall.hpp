@@ -1,6 +1,33 @@
 #pragma once
 #include "types.hpp"
 #include "arch/arch_irq.hpp"
+#include "sys/user_access.hpp"
+
+struct __CpuFeatures {
+	usize xsave_area_size;
+	bool rdrnd;
+	bool xsave;
+	bool avx;
+	bool avx512;
+	bool umip;
+	bool smep;
+	bool smap;
+	bool rdseed;
+};
+
+extern "C" __CpuFeatures CPU_FEATURES;
+
+inline void enable_user_access() {
+	[[likely]] if (CPU_FEATURES.smap) {
+		asm volatile("stac");
+	}
+}
+
+inline void disable_user_access() {
+	[[likely]] if (CPU_FEATURES.smap) {
+		asm volatile("clac");
+	}
+}
 
 struct SyscallFrame : KTRAP_FRAME {
 	[[nodiscard]] constexpr u64 num() const {
@@ -28,51 +55,76 @@ struct SyscallFrame : KTRAP_FRAME {
 	}
 
 	[[nodiscard]] inline bool arg4(u64& value) const {
+		auto* ptr = reinterpret_cast<usize*>(rsp + 40);
+		enable_user_access();
 		__try {
-			value = *reinterpret_cast<usize*>(rsp + 40);
+			ProbeForRead(ptr, 8, 8);
+			value = *ptr;
+			disable_user_access();
 			return true;
 		}
 		__except (1) {
+			disable_user_access();
 			return false;
 		}
 	}
 
 	[[nodiscard]] inline bool arg5(u64& value) const {
+		auto* ptr = reinterpret_cast<usize*>(rsp + 48);
+		enable_user_access();
 		__try {
-			value = *reinterpret_cast<usize*>(rsp + 48);
+			ProbeForRead(ptr, 8, 8);
+			value = *ptr;
+			disable_user_access();
 			return true;
 		}
 		__except (1) {
+			disable_user_access();
 			return false;
 		}
 	}
 
 	[[nodiscard]] inline bool arg6(u64& value) const {
+		auto* ptr = reinterpret_cast<usize*>(rsp + 56);
+		enable_user_access();
 		__try {
-			value = *reinterpret_cast<usize*>(rsp + 56);
+			ProbeForRead(ptr, 8, 8);
+			value = *ptr;
+			disable_user_access();
 			return true;
 		}
 		__except (1) {
+			disable_user_access();
 			return false;
 		}
 	}
 
 	[[nodiscard]] inline bool arg7(u64& value) const {
+		auto* ptr = reinterpret_cast<usize*>(rsp + 64);
+		enable_user_access();
 		__try {
-			value = *reinterpret_cast<usize*>(rsp + 64);
+			ProbeForRead(ptr, 8, 8);
+			value = *ptr;
+			disable_user_access();
 			return true;
 		}
 		__except (1) {
+			disable_user_access();
 			return false;
 		}
 	}
 
 	[[nodiscard]] inline bool arg8(u64& value) const {
+		auto* ptr = reinterpret_cast<usize*>(rsp + 72);
+		enable_user_access();
 		__try {
-			value = *reinterpret_cast<usize*>(rsp + 72);
+			ProbeForRead(ptr, 8, 8);
+			value = *ptr;
+			disable_user_access();
 			return true;
 		}
 		__except (1) {
+			disable_user_access();
 			return false;
 		}
 	}

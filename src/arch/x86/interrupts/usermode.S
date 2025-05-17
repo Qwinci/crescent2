@@ -18,59 +18,58 @@ x86_syscall_stub:
 	mov rsp, gs:44
 
 	cld
-	sti
 
-	sub rsp, (80 + 6 * 16)
-	.seh_stackalloc 80 + 6 * 16
+	sub rsp, 400
+	.seh_stackalloc 400
 	.seh_endprologue
 
-	mov [rsp + 0], rax
-	mov [rsp + 8], rcx
-	mov [rsp + 16], rdx
-	mov [rsp + 24], r8
-	mov [rsp + 32], r9
-	mov [rsp + 40], r10
-	mov [rsp + 48], r11
+	sti
+	mov [rsp + 48], rax
+	mov [rsp + 56], rcx
+	mov [rsp + 64], rdx
+	mov [rsp + 72], r8
+	mov [rsp + 80], r9
+	mov [rsp + 88], r10
+	mov [rsp + 96], r11
 	mov rax, gs:16
-	mov [rsp + 56], rax
-	stmxcsr [rsp + 72]
-	movaps [rsp + 80], xmm0
-	movaps [rsp + 96], xmm1
-	movaps [rsp + 112], xmm2
-	movaps [rsp + 128], xmm3
-	movaps [rsp + 144], xmm4
-	movaps [rsp + 160], xmm5
+	mov [rsp + 384], rax
+	stmxcsr [rsp + 44]
+	movaps [rsp + 112], xmm0
+	movaps [rsp + 128], xmm1
+	movaps [rsp + 144], xmm2
+	movaps [rsp + 160], xmm3
+	movaps [rsp + 176], xmm4
+	movaps [rsp + 192], xmm5
 
 	mov rcx, rsp
 
-	// todo fix seh here
-	sub rsp, 32
 	call syscall_handler
-	add rsp, 32
 
-	mov rax, [rsp + 0]
-	mov rcx, [rsp + 8]
-	mov rdx, [rsp + 16]
-	mov r8, [rsp + 24]
-	mov r9, [rsp + 32]
-	mov r10, [rsp + 40]
-	mov r11, [rsp + 48]
-	ldmxcsr [rsp + 72]
-	movaps xmm0, [rsp + 80]
-	movaps xmm1, [rsp + 96]
-	movaps xmm2, [rsp + 112]
-	movaps xmm3, [rsp + 128]
-	movaps xmm4, [rsp + 144]
-	movaps xmm5, [rsp + 160]
-
-	add rsp, (80 + 6 * 16)
+	mov rax, [rsp + 48]
+	mov rcx, [rsp + 56]
+	mov rdx, [rsp + 64]
+	mov r8, [rsp + 72]
+	mov r9, [rsp + 80]
+	mov r10, [rsp + 88]
+	mov r11, [rsp + 96]
+	ldmxcsr [rsp + 44]
+	movaps xmm0, [rsp + 112]
+	movaps xmm1, [rsp + 128]
+	movaps xmm2, [rsp + 144]
+	movaps xmm3, [rsp + 160]
+	movaps xmm4, [rsp + 176]
+	movaps xmm5, [rsp + 192]
 
 	cli
 
 	mov rsp, gs:16
-
 	swapgs
 	sysretq
 .seh_endproc
+
+.globl x86_syscall_stub
+.def x86_syscall_stub
+.type 32
+.endef
 
 .section ".note.GNU-stack"

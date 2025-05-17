@@ -35,8 +35,8 @@ movaps [rsp + trap_frame_offset + 160], xmm3
 movaps [rsp + trap_frame_offset + 176], xmm4
 movaps [rsp + trap_frame_offset + 192], xmm5
 
-mov al, [rsp + trap_frame_offset + 368]
-and al, 1
+mov ax, [rsp + trap_frame_offset + 368]
+and ax, 1
 mov [rsp + trap_frame_offset + 40], al
 
 .if \is_exception == 1
@@ -63,6 +63,7 @@ mov [rsp + 304], r15
 lea rax, [rsp + 320]
 mov [rsp + 208], rax
 .endif
+
 mov rcx, rsp
 call \handler
 

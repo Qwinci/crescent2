@@ -5,12 +5,11 @@
 #include "arch/arch_irql.hpp"
 #include "arch/irql.hpp"
 #include "assert.hpp"
-#include <hz/spinlock.hpp>
+#include "dev/irq.hpp"
 
 namespace {
 	u32 USED_IRQS[256 / 32] {};
 	u32 USED_SHAREABLE_IRQS[256 / 32] {};
-	u8 DISPATCH_VEC = 0;
 }
 
 u32 x86_alloc_irq(u32 count, KIRQL irql, bool shared) {
@@ -84,28 +83,30 @@ void x86_dealloc_irq(u32 irq, u32 count, bool shared) {
 }
 
 namespace {
-	hz::list<IrqHandler, &IrqHandler::hook> IRQ_HANDLERS[256] {};
+	hz::list<KINTERRUPT, &KINTERRUPT::hook> IRQ_HANDLERS[256] {};
 	hz::spinlock<void> LOCK {};
 }
 
-void register_irq_handler(u32 num, IrqHandler* handler) {
+void register_irq_handler(KINTERRUPT* irq) {
+	auto num = irq->vector;
 	IrqGuard irq_guard {};
 	auto guard = LOCK.lock();
 	if (!IRQ_HANDLERS[num].is_empty()) {
-		if (!IRQ_HANDLERS[num].front()->can_be_shared || !handler->can_be_shared) {
+		if (!IRQ_HANDLERS[num].front()->can_be_shared || !irq->can_be_shared) {
 			panic("[kernel][x86]: tried to register an incompatible irq handler");
 		}
 	}
-	IRQ_HANDLERS[num].push(handler);
+	IRQ_HANDLERS[num].push(irq);
 }
 
-void deregister_irq_handler(u32 num, IrqHandler* handler) {
+void deregister_irq_handler(KINTERRUPT* irq) {
+	auto num = irq->vector;
 	IrqGuard irq_guard {};
 	auto guard = LOCK.lock();
 	if (IRQ_HANDLERS[num].is_empty()) {
 		panic("[kernel][x86]: tried to deregister an unregistered irq handler");
 	}
-	IRQ_HANDLERS[num].remove(handler);
+	IRQ_HANDLERS[num].remove(irq);
 }
 
 extern "C" [[gnu::used]] void arch_irq_handler(KTRAP_FRAME* frame) {
@@ -137,7 +138,10 @@ extern "C" [[gnu::used]] void arch_irq_handler(KTRAP_FRAME* frame) {
 	asm volatile("sti");
 
 	for (auto& handler : IRQ_HANDLERS[num]) {
-		if (handler.fn(nullptr, handler.service_ctx)) {
+		auto fn = reinterpret_cast<bool (*)(KINTERRUPT* irq, void* service_ctx, ULONG msg_id, KTRAP_FRAME* frame)>(
+			reinterpret_cast<void*>(handler.msg_fn));
+		// frame isn't in the signature but apc needs it
+		if (fn(&handler, handler.service_ctx, handler.msg_id, frame)) {
 			break;
 		}
 	}
@@ -153,15 +157,20 @@ extern "C" [[gnu::used]] void arch_irq_handler(KTRAP_FRAME* frame) {
 	}
 }
 
-extern IrqHandler DISPATCH_IRQ_HANDLER;
+extern KINTERRUPT DISPATCH_IRQ_HANDLER;
+extern KINTERRUPT APC_IRQ_HANDLER;
 
 void x86_irq_init() {
-	DISPATCH_VEC = x86_alloc_irq(1, DISPATCH_LEVEL, false);
-	assert(DISPATCH_VEC);
-	register_irq_handler(DISPATCH_VEC, &DISPATCH_IRQ_HANDLER);
+	// manually set apc vector as it is the reserved entry
+	APC_IRQ_HANDLER.vector = (APC_LEVEL << 4) | 0xF;
+	register_irq_handler(&APC_IRQ_HANDLER);
+
+	auto vec = x86_alloc_irq(1, DISPATCH_LEVEL, false);
+	assert(vec == DISPATCH_LEVEL << 4);
+	DISPATCH_IRQ_HANDLER.vector = vec;
+	register_irq_handler(&DISPATCH_IRQ_HANDLER);
 }
 
 void arch_request_software_irq(KIRQL level) {
-	assert(level == DISPATCH_LEVEL);
-	lapic_ipi_self(DISPATCH_VEC);
+	lapic_ipi_self(level << 4);
 }

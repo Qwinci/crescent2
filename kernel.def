@@ -1,0 +1,260 @@
+LIBRARY NtosKrnl
+EXPORTS
+	DbgPrintEx
+	ExAcquireSpinLockExclusive
+	ExReleaseSpinLockExclusive
+	ExAcquireSpinLockShared
+	ExReleaseSpinLockShared
+	ExTryConvertSharedSpinLockExclusive
+
+	ExAllocatePool2
+	ExAllocatePoolWithTag
+	ExAllocatePoolWithQuotaTag
+	ExFreePool
+	ExFreePoolWithTag
+	ExRaiseAccessViolation
+	ExRaiseDatatypeMisalignment
+	ExRaiseStatus
+	ExGetPreviousMode
+
+	ExInterlockedInsertHeadList
+	ExInterlockedInsertTailList
+	ExInterlockedRemoveHeadList
+	ExpInterlockedPushEntrySList
+	ExpInterlockedPopEntrySList
+	ExQueryDepthSList
+	ExpInterlockedFlushSList
+
+	ExCreateCallback
+	ExNotifyCallback
+	ExRegisterCallback
+	ExUnregisterCallback
+
+	ExInitializePagedLookasideList
+	ExDeletePagedLookasideList
+
+	HalGetBusDataByOffset
+	HalSetBusDataByOffset
+
+	IoAllocateIrp
+	IoFreeIrp
+	IoInitializeIrp
+	IoBuildSynchronousFsdRequest
+	IofCallDriver
+	IofCompleteRequest
+
+	IoCreateDevice
+
+	IoAttachDeviceToDeviceStack
+	IoGetAttachedDevice
+	IoGetAttachedDeviceReference
+	IoGetLowerDeviceObject
+	IoGetRelatedDeviceObject
+	IoGetDeviceProperty
+
+	IoDeviceObjectType
+	IoDriverObjectType
+	IoFileObjectType
+
+	IoConnectInterruptEx
+	IoDisconnectInterruptEx
+
+	KeGetCurrentIrql
+	KfRaiseIrql
+	KeLowerIrql
+
+	KeAcquireSpinLockRaiseToDpc
+	KeAcquireSpinLockAtDpcLevel
+	KeReleaseSpinLock
+	KeReleaseSpinLockFromDpcLevel
+
+	KeAcquireInStackQueuedSpinLockAtDpcLevel
+	KeReleaseInStackQueuedSpinLockFromDpcLevel
+	KeAcquireInStackQueuedSpinLock
+	KeReleaseInStackQueuedSpinLock
+
+	KeInitializeEvent
+	KeSetEvent
+	KeClearEvent
+	KeResetEvent
+	KeReadStateEvent
+	ExEventObjectType
+
+	KeInitializeSemaphore
+	KeReleaseSemaphore
+
+	KeInitializeGuardedMutex
+	KeAcquireGuardedMutex
+	KeReleaseGuardedMutex
+
+	KeInitializeDpc
+	KeInsertQueueDpc
+	KeRemoveQueueDpc
+	KeSetImportanceDpc
+
+	KeInitializeApc
+	KeInsertQueueApc
+	KeAreAllApcsDisabled
+
+	KeTestAlertThread
+	KeDelayExecutionThread
+	KeEnterGuardedRegion
+	KeLeaveGuardedRegion
+	KeWaitForSingleObject
+	KeWaitForMultipleObjects
+	NtWaitForSingleObject
+	NtWaitForMultipleObjects
+
+	KeQueryMaximumProcessorCount
+	KeNumberProcessors
+
+	RtlCaptureContext
+	RtlLookupFunctionEntry
+	RtlUnwindEx
+	RtlVirtualUnwind
+	RtlRaiseStatus
+	RtlRaiseException
+
+	RtlInitAnsiString
+	RtlInitUnicodeString
+	RtlInitString
+	RtlCopyUnicodeString
+	RtlAppendUnicodeStringToString
+	RtlAppendUnicodeToString
+	RtlAnsiStringToUnicodeString
+	RtlUnicodeStringToAnsiString
+	RtlFreeUnicodeString
+	RtlFreeAnsiString
+	RtlIntegerToUnicodeString
+	RtlInt64ToUnicodeString
+	RtlUnicodeStringToInteger
+	RtlxUnicodeStringToAnsiSize
+	RtlEqualUnicodeString
+	RtlCompareUnicodeString
+	RtlEqualString
+	RtlCompareString
+	RtlPrefixUnicodeString
+	RtlUpcaseUnicodeChar
+	RtlDowncaseUnicodeChar
+
+	RtlInitializeBitMap
+	RtlClearAllBits
+	RtlClearBits
+	RtlClearBit
+	RtlSetBits
+	RtlSetBit
+	RtlFindClearBitsAndSet
+	RtlFindNextForwardRunClear
+	RtlAreBitsSet
+	RtlAreBitsClear
+	RtlNumberOfClearBits
+	RtlNumberOfSetBits
+
+	RtlTimeToTimeFields
+
+	RtlCheckRegistryKey
+	RtlCreateRegistryKey
+	RtlWriteRegistryValue
+	RtlQueryRegistryValues
+
+	MmMapIoSpace
+	MmUnmapIoSpace
+	MmMapLockedPagesSpecifyCache
+	MmUnmapLockedPages
+	MmAllocatePagesForMdl
+	MmAllocatePagesForMdlEx
+	MmFreePagesFromMdl
+	MmAllocateMdlForIoSpace
+	MmAllocateContiguousMemorySpecifyCache
+	MmFreeContiguousMemory
+	MmGetPhysicalAddress
+	MmUserProbeAddress
+
+	ObCreateObjectType
+	ObCreateObject
+	ObInsertObject
+	ObfReferenceObject
+	ObReferenceObjectByName
+	ObReferenceObjectByPointer
+	ObReferenceObjectByHandle
+	ObfDereferenceObject
+
+	NtCreateDirectoryObject
+	ZwCreateDirectoryObject
+
+	ProbeForRead
+	ProbeForWrite
+
+	ZwQuerySystemInformation
+	NtCreateFile
+	ZwCreateFile
+	NtOpenFile
+	ZwOpenFile
+	NtReadFile
+	ZwReadFile
+	NtWriteFile
+	ZwWriteFile
+	NtClose
+	ZwClose
+
+	NtCreateKey
+	ZwCreateKey
+	NtOpenKey
+	ZwOpenKey
+	NtEnumerateKey
+	ZwEnumerateKey
+	NtSetValueKey
+	ZwSetValueKey
+	NtDeleteValueKey
+	ZwDeleteValueKey
+	NtQueryValueKey
+	ZwQueryValueKey
+
+	memcmp
+	memcpy
+	memmove
+	memset
+	sprintf
+	sprintf_s
+	_vsnprintf_s
+	_snprintf_s
+	vsprintf_s
+	_vsnprintf
+	swprintf
+	vswprintf
+	_vsnwprintf
+	strlen
+	strnlen
+	strcmp
+	strncmp
+	strstr
+	_stricmp
+	mbstowcs
+	strncpy
+	strtok_s
+	strcpy_s
+	strcat_s
+	rand
+	srand
+	wcscmp
+	wcsncmp
+	wcslen
+	wcsnlen
+	wcschr
+	wcsrchr
+	wcsstr
+	_wcsicmp
+	_wcsnicmp
+	wcstombs
+	_wcslwr
+	wcsncat_s
+	_wcsnset_s
+	wcscpy_s
+	wcsncpy_s
+	wcscat_s
+
+	_purecall
+	__C_specific_handler
+	__chkstk
+
+	NtContinue

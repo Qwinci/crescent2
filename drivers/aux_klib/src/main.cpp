@@ -29,7 +29,7 @@ NTSTATUS AuxKlibGetSystemFirmwareTable(
 		sizeof(SYSTEM_FIRMWARE_TABLE_INFORMATION) + BufferLength,
 		0));
 	if (!info) {
-		return STATUS_NO_MEMORY;
+		return STATUS_INSUFFICIENT_RESOURCES;
 	}
 	info->ProviderSignature = FirmwareTableProviderSignature;
 	info->Action = SystemFirmwareTable_Enumerate;

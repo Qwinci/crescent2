@@ -1,29 +1,35 @@
 #include "windef.h"
-#include <stdint.h>
+#include "ntpsapi.h"
+#include "ntmmapi.h"
 
 using PTHREAD_START_ROUTINE = DWORD (*)(LPVOID ctx);
 
-// todo maybe match this?
-#if defined(__x86_64__)
-struct AMD64_CONTEXT {
-	uint64_t rip;
-	uint64_t rcx;
-	uint64_t rdx;
-	uint64_t r8;
-	uint64_t r9;
-};
-using PCONTEXT = AMD64_CONTEXT*;
-#endif
+using PPS_APC_ROUTINE = void (*)(PVOID arg1, PVOID arg2, PVOID arg3);
 
-extern "C" void LdrInitializeThunk(PCONTEXT ctx, PVOID system_arg1, PVOID system_arg2) {
-	asm volatile("syscall" : : "a"(0));
+__declspec(dllexport) extern "C" [[gnu::used]]
+void KiUserApcDispatcher(PCONTEXT ctx) {
+	NTSTATUS status;
+	do {
+		auto apc_routine = reinterpret_cast<PPS_APC_ROUTINE>(ctx->P4Home);
+		apc_routine(
+			reinterpret_cast<PVOID>(ctx->P1Home),
+			reinterpret_cast<PVOID>(ctx->P2Home),
+			reinterpret_cast<PVOID>(ctx->P3Home));
+
+		status = NtContinue(ctx, true);
+	} while (status == STATUS_SUCCESS);
 }
 
-extern "C" void RtlUserThreadStart(PTHREAD_START_ROUTINE start_routine, PVOID ctx) {
+// apc executed by the kernel in each new thread
+__declspec(dllexport) extern "C" [[gnu::used]]
+void LdrInitializeThunk(PCONTEXT ctx, PVOID system_arg1, PVOID system_arg2) {
+	// NtTestAlert to dispatch any pending apc's on the new thread
+	NtContinue(ctx, true);
+}
+
+// used in NtCreateThreadEx context
+__declspec(dllexport) extern "C" [[gnu::used]]
+void RtlUserThreadStart(PTHREAD_START_ROUTINE start_routine, PVOID ctx) {
 	start_routine(ctx);
 	// todo exit
-}
-
-extern "C" void _DllMainCRTStartup() {
-	asm volatile("syscall" : : "a"(2));
 }

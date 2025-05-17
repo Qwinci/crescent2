@@ -1,6 +1,9 @@
 #include "wait.hpp"
 #include "arch/cpu.hpp"
 #include "assert.hpp"
+#include "sys/misc.hpp"
+#include "utils/except.hpp"
+#include "arch/arch_syscall.hpp"
 #include <hz/container_of.hpp>
 
 void dispatch_header_queue_one_waiter(DISPATCHER_HEADER* header) {
@@ -33,10 +36,10 @@ void dispatch_header_queue_all_waiters(DISPATCHER_HEADER* header) {
 
 static constexpr usize THREAD_WAIT_OBJECTS = 3;
 
-NTSTATUS KeWaitForMultipleObjects(
+NTAPI NTSTATUS KeWaitForMultipleObjects(
 	u32 count,
 	void* objects[],
-	WaitType type,
+	WAIT_TYPE type,
 	KWAIT_REASON wait_reason,
 	KPROCESSOR_MODE wait_mode,
 	bool alertable,
@@ -57,6 +60,10 @@ NTSTATUS KeWaitForMultipleObjects(
 
 	auto thread = get_current_thread();
 
+	thread->alertable = alertable;
+	thread->wait_mode = wait_mode;
+	thread->wait_status = STATUS_SUCCESS;
+
 	for (u32 i = 0; i < count; ++i) {
 		auto& block = wait_block_array[i];
 		block.thread = thread;
@@ -64,10 +71,33 @@ NTSTATUS KeWaitForMultipleObjects(
 
 	auto old = KfRaiseIrql(DISPATCH_LEVEL);
 
+	if (alertable && wait_mode == UserMode) {
+		KeAcquireSpinLockAtDpcLevel(&thread->lock);
+
+		if (!IsListEmpty(&thread->apc_state.apc_list_head[UserMode])) {
+			thread->apc_state.user_apc_pending = true;
+			KeReleaseSpinLockFromDpcLevel(&thread->lock);
+			return STATUS_USER_APC;
+		}
+
+		KeReleaseSpinLockFromDpcLevel(&thread->lock);
+	}
+
 	NTSTATUS status;
 	again:
+	if (wait_mode == UserMode) {
+		KeAcquireSpinLockAtDpcLevel(&thread->lock);
+		if (thread->wait_status == STATUS_USER_APC) {
+			status = STATUS_USER_APC;
+			thread->apc_state.user_apc_pending = true;
+			KeReleaseSpinLockFromDpcLevel(&thread->lock);
+			goto cleanup;
+		}
+		KeReleaseSpinLockFromDpcLevel(&thread->lock);
+	}
+
 	u32 actual;
-	if (type == WaitType::Any) {
+	if (type == WaitAny) {
 		for (u32 i = 0; i < count; ++i) {
 			auto header = static_cast<DISPATCHER_HEADER*>(objects[i]);
 			auto* ptr = reinterpret_cast<hz::atomic<i32>*>(&header->signal_state);
@@ -185,12 +215,149 @@ NTSTATUS KeWaitForMultipleObjects(
 	return status;
 }
 
-NTSTATUS KeWaitForSingleObject(
+NTAPI NTSTATUS KeWaitForSingleObject(
 	void* object,
 	KWAIT_REASON wait_reason,
 	KPROCESSOR_MODE wait_mode,
 	bool alertable,
 	i64* timeout) {
-	return KeWaitForMultipleObjects(1, &object, WaitType::Any, wait_reason, wait_mode, alertable, timeout, nullptr);
+	return KeWaitForMultipleObjects(1, &object, WaitAny, wait_reason, wait_mode, alertable, timeout, nullptr);
 }
 
+NTAPI NTSTATUS NtWaitForMultipleObjects(
+	ULONG object_count,
+	PHANDLE object_array,
+	WAIT_TYPE wait_type,
+	BOOLEAN alertable,
+	PLARGE_INTEGER timeout) {
+	auto* objects = static_cast<PVOID*>(kmalloc(object_count * sizeof(PVOID)));
+	if (!objects) {
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+
+	auto* blocks = static_cast<KWAIT_BLOCK*>(kcalloc(object_count * sizeof(KWAIT_BLOCK)));
+	if (!blocks) {
+		kfree(objects, object_count * sizeof(PVOID));
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+
+	auto mode = ExGetPreviousMode();
+
+	LARGE_INTEGER timeout_value;
+	if (mode == UserMode) {
+		usize i = 0;
+		__try {
+			enable_user_access();
+
+			ProbeForRead(object_array, object_count * sizeof(HANDLE), alignof(HANDLE));
+
+			for (;i < object_count; ++i) {
+				auto handle = object_array[i];
+				auto status = ObReferenceObjectByHandle(
+					handle,
+					SYNCHRONIZE,
+					nullptr,
+					UserMode,
+					&objects[i],
+					nullptr);
+				if (!NT_SUCCESS(status)) {
+					for (usize j = 0; j < i; ++j) {
+						ObfDereferenceObject(blocks[j].spare_ptr);
+					}
+
+					kfree(objects, object_count * sizeof(PVOID));
+					kfree(blocks, object_count * sizeof(KWAIT_BLOCK));
+					return status;
+				}
+
+				auto* type_info = object_get_type(objects[i]);
+				blocks[i].spare_ptr = objects[i];
+				objects[i] = offset(objects[i], PVOID, type_info->wait_object_pointer_offset);
+			}
+
+			if (timeout) {
+				ProbeForRead(timeout, sizeof(LARGE_INTEGER), alignof(LARGE_INTEGER));
+				timeout_value = *timeout;
+			}
+
+			disable_user_access();
+		}
+		__except (1) {
+			disable_user_access();
+
+			for (usize j = 0; j < i; ++j) {
+				ObfDereferenceObject(blocks[j].spare_ptr);
+			}
+
+			kfree(objects, object_count * sizeof(PVOID));
+			kfree(blocks, object_count * sizeof(KWAIT_BLOCK));
+			return GetExceptionCode();
+		}
+	}
+
+	auto status = KeWaitForMultipleObjects(
+		object_count,
+		objects,
+		wait_type,
+		UserRequest,
+		mode,
+		alertable,
+		timeout ? &timeout_value.QuadPart : nullptr,
+		blocks);
+
+	for (usize j = 0; j < object_count; ++j) {
+		ObfDereferenceObject(blocks[j].spare_ptr);
+	}
+
+	kfree(objects, object_count * sizeof(PVOID));
+	kfree(blocks, object_count * sizeof(KWAIT_BLOCK));
+	return status;
+}
+
+NTAPI NTSTATUS NtWaitForSingleObject(
+	HANDLE handle,
+	BOOLEAN alertable,
+	PLARGE_INTEGER timeout) {
+	PVOID object;
+	auto mode = ExGetPreviousMode();
+
+	LARGE_INTEGER timeout_value;
+	if (mode == UserMode) {
+		if (timeout) {
+			__try {
+				enable_user_access();
+				ProbeForRead(timeout, sizeof(LARGE_INTEGER), alignof(LARGE_INTEGER));
+				timeout_value = *timeout;
+				disable_user_access();
+			}
+			__except (1) {
+				disable_user_access();
+				return GetExceptionCode();
+			}
+		}
+	}
+
+	auto status = ObReferenceObjectByHandle(
+		handle,
+		SYNCHRONIZE,
+		nullptr,
+		mode,
+		&object,
+		nullptr);
+	if (!NT_SUCCESS(status)) {
+		return status;
+	}
+
+	auto* type_info = object_get_type(object);
+
+	auto dispatch_object = offset(object, PVOID, type_info->wait_object_pointer_offset);
+	status = KeWaitForSingleObject(
+		dispatch_object,
+		UserRequest,
+		mode,
+		alertable,
+		timeout ? &timeout_value.QuadPart : nullptr);
+
+	ObfDereferenceObject(object);
+	return status;
+}

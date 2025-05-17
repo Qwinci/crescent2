@@ -33,5 +33,10 @@ struct Vfs {
 };
 
 std::shared_ptr<VNode> vfs_lookup(std::shared_ptr<VNode> root, kstd::wstring_view path);
+hz::result<std::shared_ptr<VNode>, int> vfs_create(
+	std::shared_ptr<VNode> root,
+	kstd::wstring_view path,
+	FileType type,
+	bool create_all);
 
 extern std::unique_ptr<Vfs> ROOT_VFS;

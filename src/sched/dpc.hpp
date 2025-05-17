@@ -34,5 +34,7 @@ struct KDPC {
 	volatile void* dpc_data;
 };
 
-extern "C" void KeInitializeDpc(KDPC* dpc, PKDEFERRED_ROUTINE deferred_routine, void* deferred_ctx);
-extern "C" bool KeInsertQueueDpc(KDPC* dpc, void* system_arg1, void* system_arg2);
+NTAPI extern "C" void KeInitializeDpc(KDPC* dpc, PKDEFERRED_ROUTINE deferred_routine, void* deferred_ctx);
+NTAPI extern "C" bool KeInsertQueueDpc(KDPC* dpc, void* system_arg1, void* system_arg2);
+NTAPI extern "C" BOOLEAN KeRemoveQueueDpc(KDPC* dpc);
+NTAPI extern "C" void KeSetImportanceDpc(KDPC* dpc, DpcImportance importance);

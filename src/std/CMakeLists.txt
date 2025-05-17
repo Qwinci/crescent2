@@ -7,5 +7,6 @@ target_sources(crescent PRIVATE
 	list.cpp
 	paged_list.cpp
 	rand.cpp
+	rtl.cpp
 	wchar.cpp
 )

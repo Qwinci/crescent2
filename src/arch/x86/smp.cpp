@@ -8,6 +8,7 @@
 #include "utils/shared_data.hpp"
 #include "sched/sched.hpp"
 #include "loader/limine.h"
+#include "misc/cpu.hpp"
 
 namespace {
 	hz::atomic<u32> NUM_CPUS {1};
@@ -21,11 +22,13 @@ namespace {
 	};
 }
 
-CpuFeatures CPU_FEATURES;
+extern "C" {
+	CpuFeatures CPU_FEATURES;
+}
 
 extern "C" void x86_syscall_stub();
 
-static constexpr u64 USER_GDT_BASE = 0x10;
+static constexpr u64 USER_GDT_BASE = 0x18;
 static constexpr u64 KERNEL_CS = 0x8;
 
 static void init_usermode() {
@@ -183,7 +186,6 @@ static void x86_cpu_resume(Cpu* self, Thread* current_thread, bool initial) {
 	}
 	asm volatile("mov cr4, %0" : : "r"(cr4));
 
-	msrs::IA32_GSBASE.write(reinterpret_cast<u64>(self));
 	self->current_thread = current_thread;
 }
 
@@ -194,6 +196,8 @@ static void x86_init_cpu_common(Cpu* self, u32 lapic_id) NO_THREAD_SAFETY_ANALYS
 	x86_load_gdt(&self->tss);
 	x86_load_idt();
 
+	msrs::IA32_GSBASE.write(reinterpret_cast<u64>(self));
+
 	auto* thread = new Thread {u"kernel main", self, &*KERNEL_PROCESS};
 	thread->status = ThreadStatus::Running;
 
@@ -202,7 +206,32 @@ static void x86_init_cpu_common(Cpu* self, u32 lapic_id) NO_THREAD_SAFETY_ANALYS
 	sched_init();
 }
 
-[[noreturn, gnu::sysv_abi]] static void smp_ap_entry(limine_smp_info* info) {
+extern "C" void smp_ap_entry_asm(limine_smp_info* info);
+
+asm(R"(
+.intel_syntax noprefix
+.pushsection .text
+.globl smp_ap_entry_asm
+smp_ap_entry_asm:
+	mov rax, cr0
+	// clear EM
+	and rax, ~(1 << 2)
+	// set MP
+	or rax, 1 << 1
+	mov cr0, rax
+
+	// set OSXMMEXCPT and OSFXSR
+	mov rax, cr4
+	or rax, (1 << 10 | 1 << 9)
+	mov cr4, rax
+
+	sub rsp, 32
+	mov rcx, rdi
+	jmp smp_ap_entry
+.popsection
+)");
+
+extern "C" [[noreturn, gnu::used]] void smp_ap_entry(limine_smp_info* info) {
 	KERNEL_PROCESS->page_map.use();
 	auto* cpu = reinterpret_cast<Cpu*>(info->extra_argument);
 
@@ -251,7 +280,7 @@ void x86_smp_init() {
 		cpu->extra_argument = reinterpret_cast<u64>(CPUS[i]);
 		__atomic_store_n(
 			&cpu->goto_address,
-			reinterpret_cast<limine_goto_address>(smp_ap_entry),
+			smp_ap_entry_asm,
 			__ATOMIC_SEQ_CST);
 
 		while (NUM_CPUS.load(hz::memory_order::relaxed) != prev + 1) {
@@ -260,6 +289,8 @@ void x86_smp_init() {
 
 		++index;
 	}
+
+	KeNumberProcessors = index <= 127 ? static_cast<CCHAR>(index) : CCHAR {127};
 
 	{
 		auto guard = SMP_LOCK.lock();
