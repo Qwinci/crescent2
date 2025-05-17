@@ -2,10 +2,13 @@
 #include "cstring.hpp"
 #include "mem/mem.hpp"
 #include "stdio.hpp"
+#include "assert.hpp"
 
 void* GLOBAL_RSDP;
 
 namespace acpi {
+	Fadt* GLOBAL_FADT = nullptr;
+
 	struct [[gnu::packed]] Rsdt {
 		SdtHeader hdr;
 		u32 ptr[];
@@ -47,6 +50,9 @@ namespace acpi {
 			ROOT.rsdt = to_virt<Rsdt>(rsdp->rsdt_address);
 			println("[acpi]: using RSDT");
 		}
+
+		GLOBAL_FADT = static_cast<Fadt*>(get_table("FACP"));
+		assert(GLOBAL_FADT);
 	}
 
 	void* get_table(const char (&signature)[5], u32 index) {

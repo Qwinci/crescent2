@@ -8,6 +8,7 @@
 #include "string_view.hpp"
 #include "assert.hpp"
 #include "dev/driver.hpp"
+#include "arch/x86/dev/rtc.hpp"
 #include <hz/optional.hpp>
 #include <hz/pair.hpp>
 
@@ -38,6 +39,7 @@ void arch_start(void* rsdp) {
 	acpi::init(rsdp);
 	hpet_init();
 	tsc_init();
+	rtc_init();
 	x86_smp_init();
 	x86_madt_parse();
 
