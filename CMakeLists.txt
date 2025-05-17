@@ -4,23 +4,23 @@ project(crescent C CXX ASM)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY bin)
-set(CMAKE_SHARED_LIBRARY_PREFIX "")
-set(CMAKE_SHARED_LIBRARY_SUFFIX .dll)
-set(CMAKE_STATIC_LIBRARY_PREFIX "")
-set(CMAKE_STATIC_LIBRARY_SUFFIX .lib)
 set(CMAKE_SKIP_RPATH ON)
 #set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 set(CMAKE_CXX_STANDARD_LIBRARIES "")
 set(CMAKE_MSVC_RUNTIME_LIBRARY "")
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_C_COMPILE_OPTIONS_MSVC_DEBUG_INFORMATION_FORMAT_Embedded -g -gdwarf-4)
 set(CMAKE_ASM_COMPILE_OPTIONS_MSVC_DEBUG_INFORMATION_FORMAT_Embedded -g -gdwarf-4)
 set(CMAKE_CXX_COMPILE_OPTIONS_MSVC_DEBUG_INFORMATION_FORMAT_Embedded -g -gdwarf-4)
+
+include(CheckCCompilerFlag)
+include(CheckCXXCompilerFlag)
 
 set(COMMON_CFLAGS
 	-Wall -Wextra -Werror=switch -Werror=return-type
 	-fno-threadsafe-statics
 	-fno-stack-protector -fno-omit-frame-pointer
-	-ffreestanding -fno-strict-aliasing -fno-eliminate-unused-debug-types
+	-ffreestanding -fno-strict-aliasing
 	-Wno-invalid-offsetof -Wno-unused-parameter -Wno-unused-const-variable -Wno-unused-function
 	-g3 -ggdb #-finstrument-functions
 	-masm=intel
@@ -28,39 +28,47 @@ set(COMMON_CFLAGS
 set(COMMON_CXXFLAGS
 	${COMMON_CFLAGS}
 	-nostdinc++ -fno-exceptions -fno-rtti -fsized-deallocation
-	-fvisibility-inlines-hidden
+	-funwind-tables
 )
+
+check_c_compiler_flag(-fno-eliminate-unused-debug-types COMPILER_SUPPORTS_NO_ELIMINATE_UNUSED_DEBUG_TYPES)
+check_cxx_compiler_flag(-fasync-exceptions COMPILER_SUPPORTS_ASYNC_EXCEPTIONS)
+check_cxx_compiler_flag(-Wthread-safety COMPILER_SUPPORTS_THREAD_SAFETY_WARNING)
+
+if(COMPILER_SUPPORTS_NO_ELIMINATE_UNUSED_DEBUG_TYPES)
+	list(APPEND COMMON_CFLAGS -fno-eliminate-unused-debug-types)
+endif()
+
+if(COMPILER_SUPPORTS_ASYNC_EXCEPTIONS)
+	list(APPEND COMMON_CXXFLAGS -fasync-exceptions)
+endif()
+
+add_subdirectory(common)
+add_subdirectory(hzutils)
 
 add_executable(crescent
 	src/main.cpp
 )
 target_include_directories(crescent PRIVATE src src/std common include)
 target_compile_definitions(crescent PRIVATE NTAPI=__declspec\(dllexport\))
+
 target_compile_options(crescent PRIVATE
 	$<$<COMPILE_LANGUAGE:CXX>: ${COMMON_CXXFLAGS}>
 	$<$<COMPILE_LANGUAGE:C>: ${COMMON_CFLAGS}>
 	$<$<COMPILE_LANGUAGE:ASM>: ${COMMON_CFLAGS}>
-	-Wthread-safety-analysis -Werror=thread-safety-analysis
 )
+
+if(COMPILER_SUPPORTS_THREAD_SAFETY_WARNING)
+	target_compile_options(crescent PRIVATE -Wthread-safety -Werror=thread-safety)
+endif()
+
 target_link_options(crescent PRIVATE
 	-nostdlib
 	-Wl,/entry:_start,/base:0xFFFFFFFF80000000,/ignore:longsections
 )
 
-if(ARCH STREQUAL "x86_64")
-	include(uACPI/uacpi.cmake)
-
-	target_sources(crescent PRIVATE ${UACPI_SOURCES})
-	target_include_directories(crescent PRIVATE ${UACPI_INCLUDES})
-	target_compile_definitions(crescent PRIVATE UACPI_OVERRIDE_LIBC UACPI_SIZED_FREES)
-endif()
-
-add_subdirectory(common)
-add_subdirectory(hzutils)
-
 target_link_libraries(crescent PRIVATE common_elf hzutils)
 
-#add_subdirectory(loader)
 add_subdirectory(src)
 
 set(FILES
