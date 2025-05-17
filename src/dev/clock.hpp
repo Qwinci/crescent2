@@ -27,6 +27,21 @@ struct TickSource {
 	CallbackProducer callback_producer {};
 };
 
+struct DateTime {
+	u16 year;
+	u8 month;
+	u8 day;
+	u8 hour;
+	u8 minute;
+	u8 second;
+};
+
+struct DateTimeProvider {
+	virtual ~DateTimeProvider() = default;
+
+	virtual NTSTATUS get_date_time(DateTime& time) = 0;
+};
+
 static constexpr u64 NS_IN_US = 1000;
 static constexpr u64 NS_IN_MS = NS_IN_US * 1000;
 static constexpr u64 NS_IN_S = NS_IN_MS * 1000;
@@ -34,6 +49,7 @@ static constexpr u64 NS_IN_S = NS_IN_MS * 1000;
 void register_clock_source(ClockSource* source);
 
 extern ClockSource* CLOCK_SOURCE;
+extern DateTimeProvider* DATE_TIME_PROVIDER;
 
 inline void udelay(u64 us) {
 	auto now = CLOCK_SOURCE->get_ns();

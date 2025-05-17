@@ -2,6 +2,7 @@
 #include "stdio.hpp"
 
 ClockSource* CLOCK_SOURCE;
+DateTimeProvider* DATE_TIME_PROVIDER;
 
 void register_clock_source(ClockSource* source) {
 	println("[kernel]: registering clock source ", source->name);
