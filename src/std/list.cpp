@@ -167,5 +167,5 @@ ExpInterlockedFlushSList:
 #endif
 
 NTAPI USHORT ExQueryDepthSList(SLIST_HEADER* list_head) {
-	return atomic_load(reinterpret_cast<u16*>(list_head), __ATOMIC_RELAXED);
+	return atomic_load(reinterpret_cast<u16*>(list_head), memory_order::relaxed);
 }

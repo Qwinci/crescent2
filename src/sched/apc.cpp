@@ -86,7 +86,7 @@ NTAPI BOOLEAN KeAreAllApcsDisabled() {
 	}
 
 	auto* thread = get_current_thread();
-	return atomic_load(&thread->kernel_apc_disable, __ATOMIC_RELAXED);
+	return atomic_load(&thread->kernel_apc_disable, memory_order::relaxed);
 }
 
 void trap_frame_to_context(
