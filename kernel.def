@@ -222,6 +222,8 @@ EXPORTS
 	ZwQueryValueKey
 
 	PsProcessType
+	PsThreadType
+	PsGetCurrentThreadId
 	PsGetCurrentProcessId
 
 	memcmp

@@ -215,4 +215,4 @@ UniqueKernelMapping::~UniqueKernelMapping() {
 Process* KERNEL_PROCESS;
 hz::manually_init<PageMap> KERNEL_MAP;
 
-HandleTable PROCESS_TABLE {};
+HandleTable SCHED_HANDLE_TABLE {};

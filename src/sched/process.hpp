@@ -112,4 +112,4 @@ private:
 extern Process* KERNEL_PROCESS;
 extern hz::manually_init<PageMap> KERNEL_MAP;
 
-extern HandleTable PROCESS_TABLE;
+extern HandleTable SCHED_HANDLE_TABLE;

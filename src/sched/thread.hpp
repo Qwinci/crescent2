@@ -87,6 +87,7 @@ struct Thread : public ArchThread {
 	KSPIN_LOCK desc_lock {};
 	KAFFINITY affinity {UINTPTR_MAX};
 	hz::optional<KAFFINITY> saved_user_affinity {};
+	HANDLE handle {INVALID_HANDLE_VALUE};
 };
 
 #ifdef __x86_64__

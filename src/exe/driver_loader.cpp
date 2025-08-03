@@ -7,6 +7,7 @@
 #include "arch/cpu.hpp"
 #include "arch/x86/dev/io_apic.hpp"
 #include "x86/irq.hpp"
+#include "sched/ps.hpp"
 
 static LoadedImage KERNEL_LOADED_IMAGE {};
 
@@ -51,7 +52,7 @@ hz::pair<LoadedPe, DEVICE_OBJECT*> load_predefined_bus_driver(kstd::wstring_view
 
 	auto cpu = get_current_cpu();
 
-	auto* thread = new Thread {
+	auto* thread = create_thread(
 		name,
 		cpu,
 		&*KERNEL_PROCESS,
@@ -69,7 +70,7 @@ hz::pair<LoadedPe, DEVICE_OBJECT*> load_predefined_bus_driver(kstd::wstring_view
 			KfRaiseIrql(DISPATCH_LEVEL);
 			get_current_cpu()->scheduler.block();
 		},
-		data};
+		data);
 	cpu->scheduler.queue(cpu, thread);
 
 	return {load_res.value(), dev};
@@ -122,7 +123,7 @@ DEVICE_OBJECT* load_predefined_acpi_driver(kstd::wstring_view name, kstd::wstrin
 
 	auto cpu = get_current_cpu();
 
-	auto* thread = new Thread {
+	auto* thread = create_thread(
 		name,
 		cpu,
 		&*KERNEL_PROCESS,
@@ -221,7 +222,7 @@ DEVICE_OBJECT* load_predefined_acpi_driver(kstd::wstring_view name, kstd::wstrin
 			KfRaiseIrql(DISPATCH_LEVEL);
 			get_current_cpu()->scheduler.block();
 		},
-		data};
+		data);
 	cpu->scheduler.queue(cpu, thread);
 
 	return dev;

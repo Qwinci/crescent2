@@ -5,6 +5,7 @@
 #include "sys/misc.hpp"
 
 NTAPI extern "C" OBJECT_TYPE* PsProcessType = nullptr;
+NTAPI extern "C" OBJECT_TYPE* PsThreadType = nullptr;
 
 void ps_init() {
 	UNICODE_STRING name = RTL_CONSTANT_STRING(u"Process");
@@ -17,6 +18,17 @@ void ps_init() {
 		&init,
 		nullptr,
 		&PsProcessType);
+	assert(NT_SUCCESS(status));
+
+	name = RTL_CONSTANT_STRING(u"Thread");
+	init.delete_proc = [](PVOID object) {
+		static_cast<Thread*>(object)->~Thread();
+	};
+	status = ObCreateObjectType(
+		&name,
+		&init,
+		nullptr,
+		&PsThreadType);
 	assert(NT_SUCCESS(status));
 
 	void* ptr;
@@ -34,7 +46,7 @@ void ps_init() {
 
 	KERNEL_PROCESS = new (ptr) Process {*KERNEL_MAP};
 
-	auto handle = PROCESS_TABLE.insert(KERNEL_PROCESS);
+	auto handle = SCHED_HANDLE_TABLE.insert(KERNEL_PROCESS);
 	assert(handle != INVALID_HANDLE_VALUE);
 	KERNEL_PROCESS->handle = handle;
 }
@@ -58,7 +70,7 @@ Process* create_process(kstd::wstring_view name) {
 
 	auto* proc = new (ptr) Process {name};
 
-	auto handle = PROCESS_TABLE.insert(proc);
+	auto handle = SCHED_HANDLE_TABLE.insert(proc);
 	if (handle == INVALID_HANDLE_VALUE) {
 		ObfDereferenceObject(proc);
 		return nullptr;
@@ -66,6 +78,60 @@ Process* create_process(kstd::wstring_view name) {
 	proc->handle = handle;
 
 	return proc;
+}
+
+Thread* create_initial_thread(Cpu* cpu) {
+	void* ptr;
+	auto status = ObCreateObject(
+		KernelMode,
+		PsThreadType,
+		nullptr,
+		KernelMode,
+		nullptr,
+		sizeof(Thread),
+		0,
+		sizeof(Thread),
+		&ptr);
+	if (!NT_SUCCESS(status)) {
+		return nullptr;
+	}
+
+	auto* thread = new (ptr) Thread {u"kernel main", cpu, &*KERNEL_PROCESS};
+
+	auto handle = SCHED_HANDLE_TABLE.insert(thread);
+	assert(handle != INVALID_HANDLE_VALUE);
+	thread->handle = handle;
+
+	return thread;
+}
+
+Thread* create_thread(kstd::wstring_view name, Cpu* cpu, Process* process, bool user, void (*fn)(void*), void* arg) {
+	auto mode = ExGetPreviousMode();
+	void* ptr;
+	auto status = ObCreateObject(
+		KernelMode,
+		PsThreadType,
+		nullptr,
+		mode,
+		nullptr,
+		sizeof(Thread),
+		0,
+		sizeof(Thread),
+		&ptr);
+	if (!NT_SUCCESS(status)) {
+		return nullptr;
+	}
+
+	auto* thread = new (ptr) Thread {name, cpu, process, user, fn, arg};
+
+	auto handle = SCHED_HANDLE_TABLE.insert(thread);
+	if (handle == INVALID_HANDLE_VALUE) {
+		ObfDereferenceObject(thread);
+		return nullptr;
+	}
+	thread->handle = handle;
+
+	return thread;
 }
 
 NTAPI NTSTATUS PsCreateSystemThread(
@@ -118,6 +184,10 @@ NTAPI NTSTATUS PsCreateSystemThread(
 	cpu->scheduler.queue(cpu, thread);
 	return STATUS_SUCCESS;*/
 	return STATUS_SUCCESS;
+}
+
+NTAPI HANDLE PsGetCurrentThreadId() {
+	return get_current_thread()->handle;
 }
 
 NTAPI HANDLE PsGetCurrentProcessId() {

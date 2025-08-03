@@ -13,7 +13,12 @@ using PKSTART_ROUTINE = void (*)(PVOID start_ctx);
 
 void ps_init();
 
+struct Thread;
+struct Cpu;
+
 Process* create_process(kstd::wstring_view name);
+Thread* create_initial_thread(Cpu* cpu);
+Thread* create_thread(kstd::wstring_view name, Cpu* cpu, Process* process, bool user, void (*fn)(void*), void* arg);
 
 NTAPI extern "C" NTSTATUS PsCreateSystemThread(
 	PHANDLE thread_handle,
@@ -24,4 +29,5 @@ NTAPI extern "C" NTSTATUS PsCreateSystemThread(
 	PKSTART_ROUTINE start_routine,
 	PVOID start_ctx);
 
+NTAPI extern "C" HANDLE PsGetCurrentThreadId();
 NTAPI extern "C" HANDLE PsGetCurrentProcessId();

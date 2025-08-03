@@ -58,13 +58,13 @@ void event_init();
 	exe_file = nullptr;
 
 	auto cpu = get_current_cpu();
-	auto* thread = new Thread {
+	auto* thread = create_thread(
 		u"user thread",
 		cpu,
 		process,
 		true,
 		reinterpret_cast<void (*)(void*)>(exe_res->entry),
-		nullptr};
+		nullptr);
 
 	cpu->scheduler.queue(cpu, thread);
 

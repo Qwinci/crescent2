@@ -9,6 +9,7 @@
 #include "sched/sched.hpp"
 #include "loader/limine.h"
 #include "misc/cpu.hpp"
+#include "sched/ps.hpp"
 
 namespace {
 	hz::atomic<u32> NUM_CPUS {1};
@@ -198,7 +199,7 @@ static void x86_init_cpu_common(Cpu* self, u32 lapic_id) NO_THREAD_SAFETY_ANALYS
 
 	msrs::IA32_GSBASE.write(reinterpret_cast<u64>(self));
 
-	auto* thread = new Thread {u"kernel main", self, &*KERNEL_PROCESS};
+	auto* thread = create_initial_thread(self);
 	thread->status = ThreadStatus::Running;
 
 	self->tss.iopb = sizeof(Tss);
