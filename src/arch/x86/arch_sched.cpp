@@ -202,7 +202,7 @@ ArchThread::ArchThread(void (*fn)(void*), void* arg, Process* process, bool user
 		(user ? sizeof(UserInitFrame) : sizeof(InitFrame));
 	auto* frame = reinterpret_cast<InitFrame*>(sp);
 
-	KERNEL_PROCESS->page_map.protect(reinterpret_cast<u64>(kernel_stack_base), PageFlags::Read, CacheMode::WriteBack);
+	KERNEL_MAP->protect(reinterpret_cast<u64>(kernel_stack_base), PageFlags::Read, CacheMode::WriteBack);
 
 	if (user) {
 		user_stack_base = process->allocate(

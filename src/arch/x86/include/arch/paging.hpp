@@ -17,7 +17,10 @@ FLAGS_ENUM(PageFlags);
 
 class PageMap {
 public:
+	struct OnlyKernel {};
+
 	explicit PageMap(PageMap* kernel_map);
+	PageMap(const PageMap& other, OnlyKernel) : level0 {other.level0}, used_pages {other.used_pages} {}
 	~PageMap();
 
 	[[nodiscard]] bool map_2mb(u64 virt, u64 phys, PageFlags flags, CacheMode cache_mode);

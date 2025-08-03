@@ -9,6 +9,7 @@
 #include "assert.hpp"
 #include "dev/driver.hpp"
 #include "arch/x86/dev/rtc.hpp"
+#include "sched/ps.hpp"
 #include <hz/optional.hpp>
 #include <hz/pair.hpp>
 
@@ -35,6 +36,8 @@ void arch_start(void* rsdp) {
 		PAGE_SIZE,
 		PageFlags::Read | PageFlags::Write);
 	memset(info_page, 0xFF, PAGE_SIZE);
+
+	ps_init();
 
 	acpi::init(rsdp);
 	hpet_init();

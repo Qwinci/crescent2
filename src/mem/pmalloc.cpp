@@ -28,18 +28,16 @@ void pmalloc_create_struct_pages(usize base, usize size) {
 	usize aligned_start = ALIGNDOWN(start_offset, PAGE_SIZE);
 	usize aligned_end = ALIGNUP(end_entry * sizeof(Page) + (start_offset & (PAGE_SIZE - 1)), PAGE_SIZE);
 
-	auto& kernel_map = KERNEL_PROCESS->page_map;
-
 	for (usize j = aligned_start; j < aligned_end; j += PAGE_SIZE) {
 		auto page_entry = reinterpret_cast<usize>(PAGE_REGION) + j;
 
-		auto addr = kernel_map.get_phys(page_entry);
+		auto addr = KERNEL_MAP->get_phys(page_entry);
 		if (!addr) {
 			auto page = pmalloc();
 			assert(page);
 			memset(to_virt<void>(page), 0, PAGE_SIZE);
 
-			auto status = kernel_map.map(
+			auto status = KERNEL_MAP->map(
 				page_entry,
 				page,
 				PageFlags::Read | PageFlags::Write,

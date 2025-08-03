@@ -109,10 +109,8 @@ static void setup_memory(usize max_addr) {
 	assert(kernel_hdr->signature == IMAGE_NT_SIGNATURE);
 	auto* sections = offset(&kernel_hdr->opt, const PeSectionHeader*, kernel_hdr->coff.size_of_opt_hdr);
 
-	auto& kernel_map = KERNEL_PROCESS->page_map;
-
 	for (usize i = 0; i < ALIGNUP(kernel_hdr->opt.size_of_headers, PAGE_SIZE); i += PAGE_SIZE) {
-		(void) kernel_map.map(kernel_virt + i, kernel_phys + i, PageFlags::Read, CacheMode::WriteBack);
+		(void) KERNEL_MAP->map(kernel_virt + i, kernel_phys + i, PageFlags::Read, CacheMode::WriteBack);
 	}
 
 	for (usize i = 0; i < kernel_hdr->coff.num_of_sections; ++i) {
@@ -133,7 +131,7 @@ static void setup_memory(usize max_addr) {
 		}
 
 		for (usize j = 0; j < size; j += PAGE_SIZE) {
-			(void) kernel_map.map(
+			(void) KERNEL_MAP->map(
 				kernel_virt + aligned_offset + j,
 				kernel_phys + aligned_offset + j,
 				flags,
@@ -142,10 +140,10 @@ static void setup_memory(usize max_addr) {
 	}
 
 	for (usize i = 0; i < max_addr; i += SIZE_2MB) {
-		(void) kernel_map.map_2mb(HHDM_START + i, i, PageFlags::Read | PageFlags::Write, CacheMode::WriteBack);
+		(void) KERNEL_MAP->map_2mb(HHDM_START + i, i, PageFlags::Read | PageFlags::Write, CacheMode::WriteBack);
 	}
 
-	kernel_map.use();
+	KERNEL_MAP->use();
 }
 
 [[noreturn]] void arch_start(void* rsdp);
@@ -186,8 +184,8 @@ extern "C" [[noreturn, gnu::used]] void early_start() {
 
 	HHDM_END = HHDM_START + max_phys_addr;
 
-	KERNEL_PROCESS.initialize(u"", false);
-	KERNEL_PROCESS->page_map.fill_high_half();
+	KERNEL_MAP.initialize(nullptr);
+	KERNEL_MAP->fill_high_half();
 
 	max_phys_addr = ALIGNUP(max_phys_addr, SIZE_2MB);
 	KERNEL_VSPACE.init(HHDM_START + max_phys_addr, KERNEL_ADDR_REQ.response->virtual_base - (HHDM_START + max_phys_addr));
@@ -211,8 +209,6 @@ extern "C" [[noreturn, gnu::used]] void early_start() {
 	setup_memory(max_phys_addr);
 
 	early_pmalloc_finalize();
-
-	KERNEL_PROCESS->name = u"kernel";
 
 	arch_start(to_virt<void>(reinterpret_cast<usize>(rsdp)));
 }

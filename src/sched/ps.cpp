@@ -1,7 +1,72 @@
 #include "ps.hpp"
 #include "thread.hpp"
 #include "arch/cpu.hpp"
-#include "handle_table.hpp"
+#include "rtl.hpp"
+#include "sys/misc.hpp"
+
+NTAPI extern "C" OBJECT_TYPE* PsProcessType = nullptr;
+
+void ps_init() {
+	UNICODE_STRING name = RTL_CONSTANT_STRING(u"Process");
+	OBJECT_TYPE_INITIALIZER init {};
+	init.delete_proc = [](PVOID object) {
+		static_cast<Process*>(object)->~Process();
+	};
+	auto status = ObCreateObjectType(
+		&name,
+		&init,
+		nullptr,
+		&PsProcessType);
+	assert(NT_SUCCESS(status));
+
+	void* ptr;
+	status = ObCreateObject(
+		KernelMode,
+		PsProcessType,
+		nullptr,
+		KernelMode,
+		nullptr,
+		sizeof(Process),
+		0,
+		sizeof(Process),
+		&ptr);
+	assert(NT_SUCCESS(status));
+
+	KERNEL_PROCESS = new (ptr) Process {*KERNEL_MAP};
+
+	auto handle = PROCESS_TABLE.insert(KERNEL_PROCESS);
+	assert(handle != INVALID_HANDLE_VALUE);
+	KERNEL_PROCESS->handle = handle;
+}
+
+Process* create_process(kstd::wstring_view name) {
+	auto mode = ExGetPreviousMode();
+	void* ptr;
+	auto status = ObCreateObject(
+		KernelMode,
+		PsProcessType,
+		nullptr,
+		mode,
+		nullptr,
+		sizeof(Process),
+		0,
+		sizeof(Process),
+		&ptr);
+	if (!NT_SUCCESS(status)) {
+		return nullptr;
+	}
+
+	auto* proc = new (ptr) Process {name};
+
+	auto handle = PROCESS_TABLE.insert(proc);
+	if (handle == INVALID_HANDLE_VALUE) {
+		ObfDereferenceObject(proc);
+		return nullptr;
+	}
+	proc->handle = handle;
+
+	return proc;
+}
 
 NTAPI NTSTATUS PsCreateSystemThread(
 	PHANDLE thread_handle,
@@ -53,4 +118,8 @@ NTAPI NTSTATUS PsCreateSystemThread(
 	cpu->scheduler.queue(cpu, thread);
 	return STATUS_SUCCESS;*/
 	return STATUS_SUCCESS;
+}
+
+NTAPI HANDLE PsGetCurrentProcessId() {
+	return get_current_thread()->process->handle;
 }

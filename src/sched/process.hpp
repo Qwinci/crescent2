@@ -21,7 +21,7 @@ enum class ProcessPriority {
 
 struct UniqueKernelMapping {
 	constexpr UniqueKernelMapping() = default;
-	constexpr UniqueKernelMapping(UniqueKernelMapping&& other)
+	constexpr UniqueKernelMapping(UniqueKernelMapping&& other) noexcept
 		: ptr {other.ptr}, size {other.size} {
 		other.ptr = nullptr;
 		other.size = 0;
@@ -63,7 +63,8 @@ enum class MappingFlags {
 FLAGS_ENUM(MappingFlags);
 
 struct Process {
-	Process(kstd::wstring_view name, bool user);
+	explicit Process(kstd::wstring_view name);
+	explicit Process(const PageMap& map);
 	~Process();
 
 	usize allocate(void* base, usize size, PageFlags page_flags, MappingFlags mapping_flags, UniqueKernelMapping* mapping);
@@ -74,6 +75,7 @@ struct Process {
 	ProcessDescriptor* create_descriptor();
 
 	kstd::wstring name;
+	HANDLE handle {INVALID_HANDLE_VALUE};
 	PageMap page_map;
 	ProcessPriority priority {ProcessPriority::Normal};
 	bool user;
@@ -107,4 +109,7 @@ private:
 	VMem vmem {};
 };
 
-extern hz::manually_init<Process> KERNEL_PROCESS;
+extern Process* KERNEL_PROCESS;
+extern hz::manually_init<PageMap> KERNEL_MAP;
+
+extern HandleTable PROCESS_TABLE;

@@ -31,14 +31,14 @@ NTAPI PVOID MmMapIoSpace(
 	}
 
 	for (usize i = 0; i < num_of_bytes; i += PAGE_SIZE) {
-		auto status = KERNEL_PROCESS->page_map.map(
+		auto status = KERNEL_MAP->map(
 			reinterpret_cast<u64>(virt) + i,
 			static_cast<u64>(addr.QuadPart) + i,
 			PageFlags::Read | PageFlags::Write,
 			cache_mode);
 		if (!status) {
 			for (usize j = 0; j < i; j += PAGE_SIZE) {
-				KERNEL_PROCESS->page_map.unmap(reinterpret_cast<u64>(virt) + j);
+				KERNEL_MAP->unmap(reinterpret_cast<u64>(virt) + j);
 			}
 			KERNEL_VSPACE.free(virt, num_of_bytes);
 			return nullptr;
@@ -57,7 +57,7 @@ NTAPI void MmUnmapIoSpace(PVOID addr, SIZE_T num_of_bytes) {
 	assert(ptr % PAGE_SIZE == 0);
 
 	for (usize i = 0; i < num_of_bytes; i += PAGE_SIZE) {
-		KERNEL_PROCESS->page_map.unmap(ptr + i);
+		KERNEL_MAP->unmap(ptr + i);
 	}
 }
 
@@ -115,14 +115,14 @@ NTAPI PVOID MmMapLockedPagesSpecifyCache(
 				page->allocated.cache_mode = default_cache_mode;
 			}
 
-			auto status = KERNEL_PROCESS->page_map.map(
+			auto status = KERNEL_MAP->map(
 				reinterpret_cast<u64>(virt) + i,
 				phys,
 				flags,
 				cache_mode);
 			if (!status) {
 				for (usize j = 0; j < i; j += PAGE_SIZE) {
-					KERNEL_PROCESS->page_map.unmap(reinterpret_cast<u64>(virt) + j);
+					KERNEL_MAP->unmap(reinterpret_cast<u64>(virt) + j);
 				}
 				KERNEL_VSPACE.free(virt, mdl->byte_count);
 				return nullptr;
@@ -201,7 +201,7 @@ NTAPI extern "C" void MmUnmapLockedPages(PVOID base_addr, MDL* mdl) {
 		assert(base_addr == mdl->mapped_system_va);
 
 		for (usize i = 0; i < mdl->byte_count; i += PAGE_SIZE) {
-			KERNEL_PROCESS->page_map.unmap(reinterpret_cast<u64>(base_addr) + i);
+			KERNEL_MAP->unmap(reinterpret_cast<u64>(base_addr) + i);
 		}
 
 		KERNEL_VSPACE.free(base_addr, mdl->byte_count);
@@ -443,14 +443,14 @@ NTAPI extern "C" PVOID MmAllocateContiguousMemorySpecifyCache(
 	}
 
 	for (usize i = 0; i < num_of_bytes; i += PAGE_SIZE) {
-		auto status = KERNEL_PROCESS->page_map.map(
+		auto status = KERNEL_MAP->map(
 			reinterpret_cast<u64>(virt) + i,
 			phys + i,
 			PageFlags::Read | PageFlags::Write,
 			cache_mode);
 		if (!status) {
 			for (usize j = 0; j < i; j += PAGE_SIZE) {
-				KERNEL_PROCESS->page_map.unmap(reinterpret_cast<u64>(virt) + j);
+				KERNEL_MAP->unmap(reinterpret_cast<u64>(virt) + j);
 			}
 
 			KERNEL_VSPACE.free(virt, num_of_bytes);

@@ -9,29 +9,27 @@ struct ProcessPeb {
 	PEB_LDR_DATA ldr_data;
 };
 
-Process::Process(kstd::wstring_view name, bool user)
+Process::Process(kstd::wstring_view name)
 	// NOLINTNEXTLINE
-	: name {nullptr}, page_map {user ? &KERNEL_PROCESS->page_map : nullptr}, user {user} {
-	if (user) {
-		this->name = name;
-	}
+	: name {name}, page_map {&*KERNEL_MAP}, user {true} {
 	usize start = 0x200000;
 	vmem.init(start, 0x7FFFFFFFE000 - start, PAGE_SIZE);
 
-	if (user) {
-		UniqueKernelMapping tmp_peb_mapping;
-		peb = reinterpret_cast<PEB*>(allocate(
-			nullptr,
-			sizeof(ProcessPeb),
-			PageFlags::Read | PageFlags::Write,
-			MappingFlags::Backed,
-			&tmp_peb_mapping));
-		assert(peb);
-		auto* tmp_peb = new (tmp_peb_mapping.data()) ProcessPeb {};
-		tmp_peb->peb.ProcessParameters = offset(peb, PRTL_USER_PROCESS_PARAMETERS, offsetof(ProcessPeb, params));
-		tmp_peb->peb.Ldr = offset(peb, PPEB_LDR_DATA, offsetof(ProcessPeb, ldr_data));
-	}
+	UniqueKernelMapping tmp_peb_mapping;
+	peb = reinterpret_cast<PEB*>(allocate(
+		nullptr,
+		sizeof(ProcessPeb),
+		PageFlags::Read | PageFlags::Write,
+		MappingFlags::Backed,
+		&tmp_peb_mapping));
+	assert(peb);
+	auto* tmp_peb = new (tmp_peb_mapping.data()) ProcessPeb {};
+	tmp_peb->peb.ProcessParameters = offset(peb, PRTL_USER_PROCESS_PARAMETERS, offsetof(ProcessPeb, params));
+	tmp_peb->peb.Ldr = offset(peb, PPEB_LDR_DATA, offsetof(ProcessPeb, ldr_data));
 }
+
+Process::Process(const PageMap& map)
+	: name {u"kernel"}, page_map {map, PageMap::OnlyKernel {}}, user {false} {}
 
 ProcessDescriptor::~ProcessDescriptor() {
 	auto old = KeAcquireSpinLockRaiseToDpc(&lock);
@@ -142,12 +140,14 @@ usize Process::allocate(void* base, usize size, PageFlags flags, MappingFlags ma
 		CacheMode cache_mode = CacheMode::WriteBack;
 		auto page_flags = flags | PageFlags::User;
 
-		auto& kernel_map = KERNEL_PROCESS->page_map;
-
 		for (usize i = 0; i < size; i += PAGE_SIZE) {
 			auto phys = pmalloc();
 			if (!phys || !page_map.map(virt + i, phys, page_flags, cache_mode) ||
-			    (kernel_mapping && !kernel_map.map(kernel_virt + i, phys, PageFlags::Read | PageFlags::Write, CacheMode::WriteBack))) {
+			    (kernel_mapping && !KERNEL_MAP->map(
+					kernel_virt + i,
+					phys,
+					PageFlags::Read | PageFlags::Write,
+					CacheMode::WriteBack))) {
 				for (usize j = 0; j < i; j += PAGE_SIZE) {
 					auto page_phys = page_map.get_phys(virt + j);
 					page_map.unmap(virt + j);
@@ -205,12 +205,14 @@ void Process::free(usize ptr, usize) {
 
 UniqueKernelMapping::~UniqueKernelMapping() {
 	if (ptr) {
-		auto& KERNEL_MAP = KERNEL_PROCESS->page_map;
 		for (usize i = 0; i < size; ++i) {
-			KERNEL_MAP.unmap(reinterpret_cast<u64>(ptr) + i);
+			KERNEL_MAP->unmap(reinterpret_cast<u64>(ptr) + i);
 		}
 		KERNEL_VSPACE.free(ptr, size);
 	}
 }
 
-hz::manually_init<Process> KERNEL_PROCESS;
+Process* KERNEL_PROCESS;
+hz::manually_init<PageMap> KERNEL_MAP;
+
+HandleTable PROCESS_TABLE {};

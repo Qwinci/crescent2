@@ -232,7 +232,7 @@ smp_ap_entry_asm:
 )");
 
 extern "C" [[noreturn, gnu::used]] void smp_ap_entry(limine_smp_info* info) {
-	KERNEL_PROCESS->page_map.use();
+	KERNEL_MAP->use();
 	auto* cpu = reinterpret_cast<Cpu*>(info->extra_argument);
 
 	{

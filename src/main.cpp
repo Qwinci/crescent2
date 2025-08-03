@@ -11,6 +11,7 @@
 #include "exe/driver_loader.hpp"
 #include "fs/registry.hpp"
 #include "misc/callback.hpp"
+#include "sched/ps.hpp"
 
 void pci_irq_init(LoadedPe* pci_sys_pe);
 void pnp_init();
@@ -33,8 +34,7 @@ void event_init();
 	println("loading pci.sys");
 	auto [pci_pe, pci_sys_dev] = load_predefined_bus_driver(u"pci driver", u"drivers/pci.sys");
 	pci_irq_init(&pci_pe);
-
-	auto* process = new Process {u"init", true};
+	auto* process = create_process(u"init");
 
 	auto ntdll_file = vfs_lookup(nullptr, u"libs/ntdll.dll");
 	assert(ntdll_file);
@@ -47,7 +47,7 @@ void event_init();
 	process->page_map.use();
 	fill_ntdll_offsets(ntdll_res->base);
 	get_current_thread()->process = &*KERNEL_PROCESS;
-	KERNEL_PROCESS->page_map.use();
+	KERNEL_MAP->use();
 
 	process->ntdll_base = ntdll_res->base;
 

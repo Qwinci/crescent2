@@ -35,8 +35,6 @@ void* VirtualSpace::alloc_backed(usize hint, usize size, PageFlags flags, CacheM
 		return nullptr;
 	}
 
-	auto& kernel_map = KERNEL_PROCESS->page_map;
-
 	auto pages = ALIGNUP(size, PAGE_SIZE) / PAGE_SIZE;
 	for (usize i = 0; i < pages; ++i) {
 		auto virt = reinterpret_cast<u64>(vm) + i * PAGE_SIZE;
@@ -46,7 +44,7 @@ void* VirtualSpace::alloc_backed(usize hint, usize size, PageFlags flags, CacheM
 			goto cleanup;
 		}
 
-		if (!kernel_map.map(virt, phys, flags, cache_mode)) {
+		if (!KERNEL_MAP->map(virt, phys, flags, cache_mode)) {
 			goto cleanup;
 		}
 
@@ -58,8 +56,8 @@ void* VirtualSpace::alloc_backed(usize hint, usize size, PageFlags flags, CacheM
 		}
 		for (usize j = 0; j < i; ++j) {
 			virt = reinterpret_cast<u64>(vm) + j * PAGE_SIZE;
-			auto p = kernel_map.get_phys(virt);
-			kernel_map.unmap(virt);
+			auto p = KERNEL_MAP->get_phys(virt);
+			KERNEL_MAP->unmap(virt);
 			pfree(p);
 		}
 
@@ -73,12 +71,10 @@ void* VirtualSpace::alloc_backed(usize hint, usize size, PageFlags flags, CacheM
 void VirtualSpace::free_backed(void* ptr, usize size) {
 	auto aligned = ALIGNUP(size, PAGE_SIZE);
 
-	auto& kernel_map = KERNEL_PROCESS->page_map;
-
 	for (usize i = 0; i < aligned; i += PAGE_SIZE) {
 		auto virt = reinterpret_cast<u64>(ptr) + i;
-		auto phys = kernel_map.get_phys(virt);
-		kernel_map.unmap(virt);
+		auto phys = KERNEL_MAP->get_phys(virt);
+		KERNEL_MAP->unmap(virt);
 		pfree(phys);
 	}
 

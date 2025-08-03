@@ -215,6 +215,9 @@ EXPORTS
 	NtQueryValueKey
 	ZwQueryValueKey
 
+	PsProcessType
+	PsGetCurrentProcessId
+
 	memcmp
 	memcpy
 	memmove
