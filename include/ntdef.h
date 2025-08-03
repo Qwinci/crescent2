@@ -27,6 +27,7 @@ typedef UCHAR BOOLEAN;
 
 typedef void* PVOID;
 typedef CHAR* PCHAR;
+typedef UCHAR* PUCHAR;
 
 #ifdef __cplusplus
 typedef char16_t WCHAR;
