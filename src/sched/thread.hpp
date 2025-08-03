@@ -85,6 +85,8 @@ struct Thread : public ArchThread {
 	_TEB* teb {};
 	hz::list<ThreadDescriptor, &ThreadDescriptor::hook> descriptors {};
 	KSPIN_LOCK desc_lock {};
+	KAFFINITY affinity {UINTPTR_MAX};
+	hz::optional<KAFFINITY> saved_user_affinity {};
 };
 
 #ifdef __x86_64__
@@ -101,5 +103,8 @@ NTAPI extern "C" void KeDelayExecutionThread(
 
 NTAPI extern "C" void KeEnterGuardedRegion();
 NTAPI extern "C" void KeLeaveGuardedRegion();
+
+NTAPI extern "C" KAFFINITY KeSetSystemAffinityThreadEx(KAFFINITY affinity);
+NTAPI extern "C" void KeRevertToUserAffinityThreadEx(KAFFINITY affinity);
 
 extern "C" void user_thread_entry();

@@ -12,6 +12,8 @@
 struct Scheduler {
 	explicit Scheduler(Cpu* cpu);
 
+	void yield();
+
 	void block();
 
 	bool unblock(Thread* thread) REQUIRES(thread->lock);

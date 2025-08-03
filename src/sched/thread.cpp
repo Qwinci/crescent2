@@ -106,6 +106,24 @@ BOOLEAN KeTestAlertThread(KPROCESSOR_MODE alert_mode) {
 	return state;
 }
 
+NTAPI void KeDelayExecutionThread(
+	KPROCESSOR_MODE wait_mode,
+	BOOLEAN alertable,
+	PLARGE_INTEGER interval) {
+	KIRQL old = KfRaiseIrql(DISPATCH_LEVEL);
+
+	auto* thread = get_current_thread();
+	thread->alertable = alertable;
+	thread->wait_mode = wait_mode;
+	thread->wait_status = STATUS_SUCCESS;
+
+	assert(interval->QuadPart <= 0);
+	u64 ns = static_cast<u64>(-interval->QuadPart) * 100;
+
+	thread->cpu->scheduler.sleep(ns);
+	KeLowerIrql(old);
+}
+
 NTAPI void KeEnterGuardedRegion() {
 	assert(KeGetCurrentIrql() <= APC_LEVEL);
 	auto* thread = get_current_thread();
@@ -144,20 +162,45 @@ NTAPI void KeLeaveGuardedRegion() {
 	}
 }
 
-NTAPI void KeDelayExecutionThread(
-	KPROCESSOR_MODE wait_mode,
-	BOOLEAN alertable,
-	PLARGE_INTEGER interval) {
-	KIRQL old = KfRaiseIrql(DISPATCH_LEVEL);
-
+NTAPI KAFFINITY KeSetSystemAffinityThreadEx(KAFFINITY affinity) {
 	auto* thread = get_current_thread();
-	thread->alertable = alertable;
-	thread->wait_mode = wait_mode;
-	thread->wait_status = STATUS_SUCCESS;
+	auto old = KeAcquireSpinLockRaiseToDpc(&thread->lock);
 
-	assert(interval->QuadPart <= 0);
-	u64 ns = static_cast<u64>(-interval->QuadPart) * 100;
+	KAFFINITY ret;
+	if (!thread->saved_user_affinity) {
+		thread->saved_user_affinity = thread->affinity;
+		ret = 0;
+	}
+	else {
+		ret = thread->affinity;
+	}
 
-	thread->cpu->scheduler.sleep(ns);
-	KeLowerIrql(old);
+	thread->affinity = affinity;
+
+	KeReleaseSpinLock(&thread->lock, old);
+
+	if (old < DISPATCH_LEVEL) {
+		thread->cpu->scheduler.yield();
+	}
+
+	return ret;
+}
+
+NTAPI void KeRevertToUserAffinityThreadEx(KAFFINITY affinity) {
+	auto* thread = get_current_thread();
+	auto old = KeAcquireSpinLockRaiseToDpc(&thread->lock);
+
+	if (affinity) {
+		thread->affinity = affinity;
+	}
+	else {
+		thread->affinity = thread->saved_user_affinity.value();
+		thread->saved_user_affinity.reset();
+	}
+
+	KeReleaseSpinLock(&thread->lock, old);
+
+	if (old < DISPATCH_LEVEL) {
+		thread->cpu->scheduler.yield();
+	}
 }

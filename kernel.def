@@ -102,6 +102,8 @@ EXPORTS
 	KeDelayExecutionThread
 	KeEnterGuardedRegion
 	KeLeaveGuardedRegion
+	KeSetSystemAffinityThreadEx
+	KeRevertToUserAffinityThreadEx
 	KeWaitForSingleObject
 	KeWaitForMultipleObjects
 	NtWaitForSingleObject

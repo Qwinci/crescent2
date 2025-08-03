@@ -68,6 +68,60 @@ void Scheduler::update_schedule(Cpu* cpu) {
 void sched_before_switch(Thread* prev, Thread* next);
 extern "C" void sched_switch_thread(Thread* prev, Thread* next) RELEASE(prev->lock);
 
+void Scheduler::yield() {
+	auto current = get_current_thread();
+
+	auto old = KfRaiseIrql(DISPATCH_LEVEL);
+	auto cpu = current->cpu;
+
+	KeAcquireSpinLockAtDpcLevel(&lock);
+	KeAcquireSpinLockAtDpcLevel(&current->lock);
+
+	bool current_affinity_allowed = current->affinity & 1ULL << current->cpu->number;
+
+	if (!current_affinity_allowed) {
+		current->status = ThreadStatus::Waiting;
+	}
+
+	update_schedule(cpu);
+	cpu->quantum_end = false;
+
+	if (current_affinity_allowed) {
+		if (!cpu->next_thread) {
+			set_thread_expiry(cpu, current);
+			KeReleaseSpinLockFromDpcLevel(&current->lock);
+			KeReleaseSpinLock(&lock, old);
+			return;
+		}
+
+		queue_private(cpu, current);
+	}
+	else {
+		for (auto cpu_it : CPUS) {
+			if (current->affinity & 1ULL << cpu_it->number) {
+				KeAcquireSpinLockAtDpcLevel(&cpu_it->scheduler.lock);
+				cpu_it->scheduler.queue_private(cpu_it, current);
+				KeReleaseSpinLockFromDpcLevel(&cpu_it->scheduler.lock);
+				break;
+			}
+		}
+	}
+
+	cpu->current_thread = cpu->next_thread;
+	cpu->next_thread = nullptr;
+
+	KeReleaseSpinLockFromDpcLevel(&lock);
+
+	cpu->current_thread->status = ThreadStatus::Running;
+	cpu->current_thread->process->page_map.use();
+
+	sched_before_switch(current, cpu->current_thread);
+	cpu->current_thread->last_run_start_cycles = get_cycle_count();
+	sched_switch_thread(current, cpu->current_thread);
+
+	KeLowerIrql(old);
+}
+
 void Scheduler::block() {
 	auto current = get_current_thread();
 
