@@ -101,6 +101,7 @@ EXPORTS
 	KeInsertQueueDpc
 	KeRemoveQueueDpc
 	KeSetImportanceDpc
+	KeFlushQueuedDpcs
 
 	KeInitializeApc
 	KeInsertQueueApc

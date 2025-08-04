@@ -84,6 +84,29 @@ NTAPI void KeSetImportanceDpc(KDPC* dpc, DpcImportance importance) {
 	dpc->importance = static_cast<u8>(importance);
 }
 
+NTAPI void KeFlushQueuedDpcs() {
+	auto* cur = get_current_cpu();
+
+	auto old = KeAcquireSpinLockRaiseToDpc(&cur->dpc_list_lock);
+	bool full = cur->dpc_list_head.Next;
+	KeReleaseSpinLockFromDpcLevel(&cur->dpc_list_lock);
+
+	if (full) {
+		cur->scheduler.yield();
+	}
+
+	KeLowerIrql(old);
+
+	for (auto cpu : CPUS) {
+		if (cpu == cur) {
+			continue;
+		}
+		KeSetSystemAffinityThreadEx(1ULL << cpu->number);
+	}
+
+	KeRevertToUserAffinityThreadEx(0);
+}
+
 void process_dpcs() {
 	assert(KeGetCurrentIrql() == DISPATCH_LEVEL);
 

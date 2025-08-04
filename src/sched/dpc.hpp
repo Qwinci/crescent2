@@ -38,3 +38,4 @@ NTAPI extern "C" void KeInitializeDpc(KDPC* dpc, PKDEFERRED_ROUTINE deferred_rou
 NTAPI extern "C" bool KeInsertQueueDpc(KDPC* dpc, void* system_arg1, void* system_arg2);
 NTAPI extern "C" BOOLEAN KeRemoveQueueDpc(KDPC* dpc);
 NTAPI extern "C" void KeSetImportanceDpc(KDPC* dpc, DpcImportance importance);
+NTAPI extern "C" void KeFlushQueuedDpcs();
