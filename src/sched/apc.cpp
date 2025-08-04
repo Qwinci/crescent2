@@ -86,7 +86,7 @@ NTAPI BOOLEAN KeAreAllApcsDisabled() {
 	}
 
 	auto* thread = get_current_thread();
-	return atomic_load(&thread->kernel_apc_disable, memory_order::relaxed);
+	return atomic_load(&thread->special_apc_disable, memory_order::relaxed);
 }
 
 void trap_frame_to_context(
@@ -106,6 +106,11 @@ void deliver_apc(
 	auto& user_list = thread->apc_state.apc_list_head[UserMode];
 
 	KIRQL old = KeAcquireSpinLockRaiseToDpc(&thread->lock);
+
+	if (thread->special_apc_disable) {
+		KeReleaseSpinLock(&thread->lock, APC_LEVEL);
+		return;
+	}
 
 	thread->apc_state.kernel_apc_pending = false;
 
@@ -174,7 +179,8 @@ void deliver_apc(
 	}
 
 	if (previous_mode != UserMode ||
-		!thread->apc_state.user_apc_pending) {
+		!thread->apc_state.user_apc_pending ||
+		thread->kernel_apc_disable) {
 		KeReleaseSpinLock(&thread->lock, old);
 		return;
 	}

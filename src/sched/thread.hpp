@@ -80,8 +80,10 @@ struct Thread : public ArchThread {
 	NTSTATUS wait_status {};
 	bool exiting {};
 	bool alertable {};
-	// inside critical sections
+	// inside critical sections (user + kernel apc's disabled but special allowed)
 	u32 kernel_apc_disable {};
+	// inside guarded sections (no apc's allowed)
+	u32 special_apc_disable {};
 	bool alerted[2] {};
 	_TEB* teb {};
 	hz::list_hook process_hook {};
@@ -103,6 +105,8 @@ NTAPI extern "C" void KeDelayExecutionThread(
 	BOOLEAN alertable,
 	PLARGE_INTEGER interval);
 
+NTAPI extern "C" void KeEnterCriticalRegion();
+NTAPI extern "C" void KeLeaveCriticalRegion();
 NTAPI extern "C" void KeEnterGuardedRegion();
 NTAPI extern "C" void KeLeaveGuardedRegion();
 

@@ -89,12 +89,50 @@ NTAPI void KeDelayExecutionThread(
 	KeLowerIrql(old);
 }
 
-NTAPI void KeEnterGuardedRegion() {
+NTAPI void KeEnterCriticalRegion() {
 	assert(KeGetCurrentIrql() <= APC_LEVEL);
 	auto* thread = get_current_thread();
 	// todo maybe atomic instead of lock here
 	auto old = KeAcquireSpinLockRaiseToDpc(&thread->lock);
 	++thread->kernel_apc_disable;
+	KeReleaseSpinLock(&thread->lock, old);
+}
+
+NTAPI void KeLeaveCriticalRegion() {
+	assert(KeGetCurrentIrql() <= APC_LEVEL);
+	auto* thread = get_current_thread();
+	// todo maybe atomic instead of lock here
+	auto old = KeAcquireSpinLockRaiseToDpc(&thread->lock);
+
+	if (--thread->kernel_apc_disable == 0) {
+		if (!IsListEmpty(&thread->apc_state.apc_list_head[KernelMode])) {
+			if (KeGetCurrentIrql() == PASSIVE_LEVEL) {
+				KeReleaseSpinLock(&thread->lock, old);
+				KfRaiseIrql(APC_LEVEL);
+				deliver_apc(KernelMode, nullptr, nullptr);
+				KeLowerIrql(PASSIVE_LEVEL);
+			}
+			else {
+				thread->apc_state.kernel_apc_pending = true;
+				KeReleaseSpinLock(&thread->lock, old);
+				arch_request_software_irq(APC_LEVEL);
+			}
+		}
+		else {
+			KeReleaseSpinLock(&thread->lock, old);
+		}
+	}
+	else {
+		KeReleaseSpinLock(&thread->lock, old);
+	}
+}
+
+NTAPI void KeEnterGuardedRegion() {
+	assert(KeGetCurrentIrql() <= APC_LEVEL);
+	auto* thread = get_current_thread();
+	// todo maybe atomic instead of lock here
+	auto old = KeAcquireSpinLockRaiseToDpc(&thread->lock);
+	++thread->special_apc_disable;
 	KeReleaseSpinLock(&thread->lock, old);
 }
 
@@ -104,7 +142,7 @@ NTAPI void KeLeaveGuardedRegion() {
 	// todo maybe atomic instead of lock here
 	auto old = KeAcquireSpinLockRaiseToDpc(&thread->lock);
 
-	if (--thread->kernel_apc_disable == 0) {
+	if (--thread->special_apc_disable == 0) {
 		if (!IsListEmpty(&thread->apc_state.apc_list_head[KernelMode])) {
 			if (KeGetCurrentIrql() == PASSIVE_LEVEL) {
 				KeReleaseSpinLock(&thread->lock, old);
