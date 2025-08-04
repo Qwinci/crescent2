@@ -468,21 +468,7 @@ NTAPI extern "C" NTSTATUS ZwWriteFile(
 }
 
 NTAPI extern "C" NTSTATUS NtClose(HANDLE handle) {
-	PVOID object;
-	auto status = ObReferenceObjectByHandle(
-		handle,
-		0,
-		nullptr,
-		ExGetPreviousMode(),
-		&object,
-		nullptr);
-	if (!NT_SUCCESS(status)) {
-		return status;
-	}
-
-	ObfDereferenceObject(object);
-	ObfDereferenceObject(object);
-	return STATUS_SUCCESS;
+	return ob_close_handle(handle, ExGetPreviousMode());
 }
 
 NTAPI extern "C" NTSTATUS ZwClose(HANDLE handle) {

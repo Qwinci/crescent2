@@ -55,6 +55,7 @@ NTAPI extern "C" NTSTATUS ObCreateObjectType(
 	POBJECT_TYPE* object_type);
 
 OBJECT_TYPE_INITIALIZER* object_get_type(PVOID object);
+OBJECT_TYPE* object_get_full_type(PVOID object);
 
 NTAPI extern "C" NTSTATUS ObCreateObject(
 	KPROCESSOR_MODE probe_mode,
@@ -85,6 +86,8 @@ NTAPI extern "C" NTSTATUS ZwCreateDirectoryObject(
 
 NTAPI extern "C" void ObfReferenceObject(PVOID object);
 NTAPI extern "C" void ObfDereferenceObject(PVOID object);
+
+NTAPI extern "C" NTSTATUS ob_close_handle(HANDLE handle, KPROCESSOR_MODE previous_mode);
 
 NTAPI extern "C" NTSTATUS ObReferenceObjectByPointer(
 	PVOID object,

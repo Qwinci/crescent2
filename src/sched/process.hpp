@@ -9,6 +9,7 @@
 #include "flags_enum.hpp"
 #include "descriptors.hpp"
 #include "handle_table.hpp"
+#include "thread.hpp"
 
 enum class ProcessPriority {
 	Idle = 1,
@@ -70,9 +71,10 @@ struct Process {
 	usize allocate(void* base, usize size, PageFlags page_flags, MappingFlags mapping_flags, UniqueKernelMapping* mapping);
 	void free(usize ptr, usize size);
 
-	void mark_as_exiting(int exit_status, ProcessDescriptor* skip_lock);
+	void mark_as_exiting(int exit_status);
 
-	ProcessDescriptor* create_descriptor();
+	void add_thread(Thread* thread);
+	void remove_thread(Thread* thread);
 
 	kstd::wstring name;
 	HANDLE handle {INVALID_HANDLE_VALUE};
@@ -98,11 +100,13 @@ struct Process {
 
 	KSPIN_LOCK mapping_lock {};
 	hz::rb_tree<Mapping, &Mapping::hook> mappings {};
+	hz::list<Thread, &Thread::process_hook> threads {};
+	KSPIN_LOCK threads_lock {};
 	usize ntdll_base {};
 	_PEB* peb {};
-	hz::list<ProcessDescriptor, &ProcessDescriptor::hook> descriptors {};
-	KSPIN_LOCK desc_lock {};
 	bool exiting {};
+	int exit_status {};
+	KSPIN_LOCK lock {};
 	HandleTable handle_table {};
 
 private:

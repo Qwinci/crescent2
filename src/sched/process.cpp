@@ -31,61 +31,36 @@ Process::Process(kstd::wstring_view name)
 Process::Process(const PageMap& map)
 	: name {u"kernel"}, page_map {map, PageMap::OnlyKernel {}}, user {false} {}
 
-ProcessDescriptor::~ProcessDescriptor() {
-	auto old = KeAcquireSpinLockRaiseToDpc(&lock);
-
-	if (process) {
-		KeAcquireSpinLockAtDpcLevel(&process->desc_lock);
-		process->descriptors.remove(this);
-		KeReleaseSpinLockFromDpcLevel(&process->desc_lock);
-		process = nullptr;
-	}
-
-	KeReleaseSpinLock(&lock, old);
-}
-
-void Process::mark_as_exiting(int exit_status, ProcessDescriptor* skip_lock) {
+void Process::mark_as_exiting(int new_exit_status) {
 	assert(KeGetCurrentIrql() >= DISPATCH_LEVEL);
-	KeAcquireSpinLockAtDpcLevel(&desc_lock);
-
-	for (auto& desc : descriptors) {
-		if (&desc != skip_lock) {
-			KeAcquireSpinLockAtDpcLevel(&desc.lock);
-			assert(desc.process == this);
-			desc.process = nullptr;
-			desc.status = exit_status;
-			KeReleaseSpinLockFromDpcLevel(&desc.lock);
-		}
-		else {
-			assert(desc.process == this);
-			desc.process = nullptr;
-			desc.status = exit_status;
-		}
-	}
-
-	descriptors.clear();
+	KeAcquireSpinLockAtDpcLevel(&lock);
 
 	exiting = true;
+	exit_status = new_exit_status;
 
-	KeReleaseSpinLockFromDpcLevel(&desc_lock);
+	KeReleaseSpinLockFromDpcLevel(&lock);
 }
 
-ProcessDescriptor* Process::create_descriptor() {
-	/*ObjectWrapper<ProcessDescriptor> desc {};
-	desc->process = this;
+void Process::add_thread(Thread* thread) {
+	thread->process = this;
+	auto old = KeAcquireSpinLockRaiseToDpc(&threads_lock);
+	threads.push(thread);
+	ObfReferenceObject(this);
+	KeReleaseSpinLock(&threads_lock, old);
+}
 
-	auto old = KeAcquireSpinLockRaiseToDpc(&desc_lock);
-
-	descriptors.push(desc.get());
-
-	KeReleaseSpinLock(&desc_lock, old);
-
-	return desc;*/
-	// todo
-	assert(false);
+void Process::remove_thread(Thread* thread) {
+	auto old = KeAcquireSpinLockRaiseToDpc(&threads_lock);
+	threads.remove(thread);
+	KeReleaseSpinLock(&threads_lock, old);
+	ObfDereferenceObject(this);
 }
 
 Process::~Process() {
+	// removing the handle will dereference this again making the refcount a very large number,
+	// but it doesn't really matter as the object is going to be freed by the previous call anyway
+	SCHED_HANDLE_TABLE.remove(handle);
+
 	auto old = KeAcquireSpinLockRaiseToDpc(&mapping_lock);
 
 	Mapping* next;

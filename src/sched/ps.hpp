@@ -28,6 +28,7 @@ NTAPI extern "C" NTSTATUS PsCreateSystemThread(
 	CLIENT_ID* client_id,
 	PKSTART_ROUTINE start_routine,
 	PVOID start_ctx);
+NTAPI extern "C" NTSTATUS PsTerminateSystemThread(NTSTATUS exit_status);
 
 NTAPI extern "C" HANDLE PsGetCurrentThreadId();
 NTAPI extern "C" HANDLE PsGetCurrentProcessId();

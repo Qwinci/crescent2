@@ -247,8 +247,8 @@ extern "C" [[noreturn, gnu::used]] void smp_ap_entry(limine_smp_info* info) {
 	}
 
 	cpu->tick_source->oneshot(Scheduler::CLOCK_INTERVAL_MS * 1000);
-	cpu->scheduler.block();
-	panic("[kernel][x86]: scheduler block returned in ap entry");
+	get_current_thread()->exit(0);
+	panic("[kernel][x86]: thread exit returned in ap entry");
 }
 
 void x86_irq_init();

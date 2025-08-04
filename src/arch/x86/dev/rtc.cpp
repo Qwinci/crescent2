@@ -97,6 +97,8 @@ static DateTime x86_read_rtc() {
 		}
 	}
 
+	asm volatile("sti");
+
 	auto to_binary = [](u8& byte) {
 		byte = (byte & 0xF) + (byte >> 4) * 10;
 	};

@@ -68,6 +68,6 @@ void event_init();
 
 	cpu->scheduler.queue(cpu, thread);
 
-	cpu->scheduler.block();
+	get_current_thread()->exit(0);
 	panic("[kernel]: returned to kmain");
 }

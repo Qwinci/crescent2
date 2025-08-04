@@ -115,6 +115,11 @@ OBJECT_TYPE_INITIALIZER* object_get_type(PVOID object) {
 	return &type->type_info;
 }
 
+OBJECT_TYPE* object_get_full_type(PVOID object) {
+	auto* hdr = reinterpret_cast<OBJECT_HEADER*>(object) - 1;
+	return OBJECT_TYPE_TABLE[hdr->type_index];
+}
+
 NTAPI NTSTATUS ObCreateObjectType(
 	PUNICODE_STRING type_name,
 	OBJECT_TYPE_INITIALIZER* object_type_initializer,
@@ -673,7 +678,7 @@ NTAPI NTSTATUS ObInsertObject(
 				return STATUS_INSUFFICIENT_RESOURCES;
 			}
 
-			*handle = h;
+			*handle = to_kernel_handle(h);
 		}
 		else {
 			auto h = get_current_thread()->process->handle_table.insert(object, info->attribs & OBJ_INHERIT);
@@ -777,6 +782,29 @@ NTAPI void ObfDereferenceObject(PVOID object) {
 	}
 }
 
+NTAPI NTSTATUS ob_close_handle(HANDLE handle, KPROCESSOR_MODE previous_mode) {
+	auto is_kernel = is_kernel_handle(handle);
+	if (is_kernel) {
+		if (previous_mode != KernelMode) {
+			return STATUS_INVALID_HANDLE;
+		}
+
+		handle = from_kernel_handle(handle);
+
+		if (!KERNEL_PROCESS->handle_table.remove(handle)) {
+			return STATUS_INVALID_HANDLE;
+		}
+	}
+	else {
+		auto* process = get_current_thread()->process;
+		if (!process->handle_table.remove(handle)) {
+			return STATUS_INVALID_HANDLE;
+		}
+	}
+
+	return STATUS_SUCCESS;
+}
+
 NTAPI NTSTATUS ObReferenceObjectByPointer(
 	PVOID object,
 	ACCESS_MASK desired_access,
@@ -805,7 +833,7 @@ NTAPI NTSTATUS ObReferenceObjectByHandle(
 
 	auto is_kernel = is_kernel_handle(handle);
 	if (is_kernel) {
-		handle = to_kernel_handle(handle);
+		handle = from_kernel_handle(handle);
 
 		if (auto res_object_opt = KERNEL_PROCESS->handle_table.get(handle)) {
 			PVOID res_object = res_object_opt.value();
@@ -900,7 +928,7 @@ NTAPI extern "C" NTSTATUS ObOpenObjectByName(
 			return STATUS_INSUFFICIENT_RESOURCES;
 		}
 
-		*handle = h;
+		*handle = to_kernel_handle(h);
 	}
 	else {
 		auto h = get_current_thread()->process->handle_table.insert(object, object_attribs->attributes & OBJ_INHERIT);

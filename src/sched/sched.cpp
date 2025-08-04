@@ -22,6 +22,22 @@ namespace {
 	}
 }
 
+[[gnu::noreturn]] static void sched_thread_destroyer(void* arg) {
+	auto& scheduler = *static_cast<Scheduler*>(arg);
+
+	while (true) {
+		auto old = KeAcquireSpinLockRaiseToDpc(&scheduler.destroy_lock);
+
+		while (auto thread = scheduler.destroy_queue.pop_front()) {
+			ObfDereferenceObject(thread);
+		}
+
+		KeReleaseSpinLock(&scheduler.destroy_lock, old);
+
+		scheduler.sleep(NS_IN_S);
+	}
+}
+
 Scheduler::Scheduler(Cpu* cpu) {
 	// KeInitializeDpc can't be used here as the current cpu is not yet initialized
 	dpc.importance = static_cast<u8>(DpcImportance::Medium);
@@ -44,6 +60,17 @@ void Scheduler::queue_private(Cpu* cpu, Thread* thread) {
 }
 
 void Scheduler::update_schedule(Cpu* cpu) {
+	if (cpu->current_thread->status == ThreadStatus::Terminated) {
+		assert(cpu->current_thread->lock.value.load(hz::memory_order::relaxed));
+		assert(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
+		SCHED_HANDLE_TABLE.remove(cpu->current_thread->handle);
+
+		KeAcquireSpinLockAtDpcLevel(&destroy_lock);
+		destroy_queue.push(cpu->current_thread);
+		KeReleaseSpinLockFromDpcLevel(&destroy_lock);
+	}
+
 	auto index = find_level(ready_summary);
 	if (!index) {
 		if (cpu->current_thread->status != ThreadStatus::Running) {
@@ -122,7 +149,7 @@ void Scheduler::yield() {
 	KeLowerIrql(old);
 }
 
-void Scheduler::block() {
+void Scheduler::block(ThreadStatus status) {
 	auto current = get_current_thread();
 
 	// raising the irql to DISPATCH_LEVEL also prevents preemption
@@ -135,7 +162,7 @@ void Scheduler::block() {
 		return;
 	}
 
-	current->status = ThreadStatus::Waiting;
+	current->status = status;
 
 	auto cpu = get_current_cpu();
 
@@ -317,5 +344,14 @@ void Scheduler::on_timer(Cpu* cpu) {
 }
 
 void sched_init() {
+	auto* cpu = get_current_cpu();
 
+	auto destroyer_thread = new Thread {
+		u"thread destroyer",
+		cpu,
+		&*KERNEL_PROCESS,
+		false,
+		sched_thread_destroyer,
+		&cpu->scheduler};
+	cpu->scheduler.queue(cpu, destroyer_thread);
 }

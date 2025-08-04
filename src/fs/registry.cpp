@@ -342,7 +342,7 @@ NTAPI NTSTATUS NtCreateKey(
 	OBJECT_ATTRIBUTES copy = *object_attribs;
 	copy.attributes |= OBJ_CASE_INSENSITIVE | OBJ_OPENIF;
 	auto status = ObOpenObjectByName(
-		object_attribs,
+		&copy,
 		nullptr,
 		ExGetPreviousMode(),
 		nullptr,

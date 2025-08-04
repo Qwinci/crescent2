@@ -192,7 +192,7 @@ NTAPI NTSTATUS KeWaitForMultipleObjects(
 		goto again;
 	}
 	else {
-		thread->cpu->scheduler.block();
+		thread->cpu->scheduler.block(ThreadStatus::Waiting);
 		goto again;
 	}
 

@@ -1,12 +1,14 @@
 #pragma once
 #include "arch/arch_thread.hpp"
-#include "process.hpp"
 #include "arch/arch_irql.hpp"
 #include "string_view.hpp"
 #include "ntdef.h"
 #include "fs/object.hpp"
 #include "descriptors.hpp"
+#include "string.hpp"
+#include "handle_table.hpp"
 #include <hz/list.hpp>
+#include <hz/optional.hpp>
 
 enum class ThreadPriority {
 	Idle = -15,
@@ -53,10 +55,9 @@ struct _TEB;
 struct Thread : public ArchThread {
 	Thread(kstd::wstring_view name, Cpu* cpu, Process* process);
 	Thread(kstd::wstring_view name, Cpu* cpu, Process* process, bool user, void (*fn)(void*), void* arg);
+	~Thread();
 
-	ThreadDescriptor* create_descriptor();
-
-	void mark_as_exiting(int exit_status, ThreadDescriptor* skip_lock);
+	void exit(int exit_status);
 
 	union {
 		hz::list_hook hook {};
@@ -83,11 +84,11 @@ struct Thread : public ArchThread {
 	u32 kernel_apc_disable {};
 	bool alerted[2] {};
 	_TEB* teb {};
-	hz::list<ThreadDescriptor, &ThreadDescriptor::hook> descriptors {};
-	KSPIN_LOCK desc_lock {};
+	hz::list_hook process_hook {};
 	KAFFINITY affinity {UINTPTR_MAX};
 	hz::optional<KAFFINITY> saved_user_affinity {};
 	HANDLE handle {INVALID_HANDLE_VALUE};
+	int exit_status {};
 };
 
 #ifdef __x86_64__

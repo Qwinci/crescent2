@@ -5,6 +5,7 @@
 #include "arch/arch_sched.hpp"
 #include "utils/spinlock.hpp"
 #include "dpc.hpp"
+#include "process.hpp"
 #include <hz/list.hpp>
 #include <hz/new.hpp>
 #include <hz/container_of.hpp>
@@ -14,7 +15,7 @@ struct Scheduler {
 
 	void yield();
 
-	void block();
+	void block(ThreadStatus status);
 
 	bool unblock(Thread* thread) REQUIRES(thread->lock);
 	void sleep(u64 ns);
@@ -30,6 +31,8 @@ struct Scheduler {
 	static constexpr usize QUANTUM_CLOCK_INTERVALS = 2;
 
 private:
+	friend void sched_thread_destroyer(void* arg);
+
 	void queue_private(Cpu* cpu, Thread* thread) REQUIRES(lock, thread->lock);
 	void update_schedule(Cpu* cpu) REQUIRES(lock);
 
@@ -78,7 +81,9 @@ private:
 	Level levels[32] GUARDED_BY(lock) {};
 	u32 ready_summary GUARDED_BY(lock) {};
 	hz::list<Thread, &Thread::hook> sleeping_threads GUARDED_BY(lock) {};
+	hz::list<Thread, &Thread::hook> destroy_queue GUARDED_BY(destroy_lock) {};
 	KSPIN_LOCK lock {};
+	KSPIN_LOCK destroy_lock {};
 	KDPC dpc {};
 };
 

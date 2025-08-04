@@ -8,6 +8,7 @@
 #include "rtl.hpp"
 #include "pnp_internals.hpp"
 #include "arch/arch_syscall.hpp"
+#include "sched/process.hpp"
 
 NTAPI extern "C" OBJECT_TYPE* IoDeviceObjectType = nullptr;
 NTAPI extern "C" OBJECT_TYPE* IoDriverObjectType = nullptr;

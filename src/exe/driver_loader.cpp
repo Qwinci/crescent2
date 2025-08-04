@@ -67,8 +67,7 @@ hz::pair<LoadedPe, DEVICE_OBJECT*> load_predefined_bus_driver(kstd::wstring_view
 
 			enumerate_bus(dev);
 
-			KfRaiseIrql(DISPATCH_LEVEL);
-			get_current_cpu()->scheduler.block();
+			PsTerminateSystemThread(0);
 		},
 		data);
 	cpu->scheduler.queue(cpu, thread);
@@ -219,8 +218,7 @@ DEVICE_OBJECT* load_predefined_acpi_driver(kstd::wstring_view name, kstd::wstrin
 			// todo keep track of resource list to not leak it
 			//enumerate_bus(dev);
 
-			KfRaiseIrql(DISPATCH_LEVEL);
-			get_current_cpu()->scheduler.block();
+			PsTerminateSystemThread(0);
 		},
 		data);
 	cpu->scheduler.queue(cpu, thread);

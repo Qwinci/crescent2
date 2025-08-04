@@ -3,6 +3,7 @@
 #include "arch/cpu.hpp"
 #include "rtl.hpp"
 #include "sys/misc.hpp"
+#include "process.hpp"
 
 NTAPI extern "C" OBJECT_TYPE* PsProcessType = nullptr;
 NTAPI extern "C" OBJECT_TYPE* PsThreadType = nullptr;
@@ -77,6 +78,9 @@ Process* create_process(kstd::wstring_view name) {
 	}
 	proc->handle = handle;
 
+	// remove the reference made inside SCHED_HANDLE_TABLE
+	ObfDereferenceObject(proc);
+
 	return proc;
 }
 
@@ -142,48 +146,51 @@ NTAPI NTSTATUS PsCreateSystemThread(
 	CLIENT_ID* client_id,
 	PKSTART_ROUTINE start_routine,
 	PVOID start_ctx) {
-	/*auto* cpu = get_current_cpu();
+	auto* cpu = get_current_cpu();
 
 	Thread* thread;
 
-	hz::optional<Handle> generic_proc_handle {};
 	if (process_handle != nullptr) {
-		generic_proc_handle = KERNEL_PROCESS->handle_table.get(process_handle);
-		ObjectWrapper<ProcessDescriptor>* desc_ptr;
-		if (!generic_proc_handle || !(desc_ptr = generic_proc_handle->get<ObjectWrapper<ProcessDescriptor>>())) {
+		// todo use ob to open handle
+		auto proc_handle = KERNEL_PROCESS->handle_table.get(process_handle);
+		if (!proc_handle || object_get_full_type(*proc_handle) != PsProcessType) {
 			return STATUS_INVALID_PARAMETER;
 		}
 
-		auto& desc = *desc_ptr;
-
-		auto old = KeAcquireSpinLockRaiseToDpc(&desc->lock);
-
-		// todo add thread to process
-		thread = new Thread {u"system thread", cpu, desc->process, false, start_routine, start_ctx};
-
-		KeReleaseSpinLock(&desc->lock, old);
+		thread = create_thread(u"system thread", cpu, static_cast<Process*>(*proc_handle), false, start_routine, start_ctx);
 	}
 	else {
-		thread = new Thread {u"system thread", cpu, &*KERNEL_PROCESS, false, start_routine, start_ctx};
+		thread = create_thread(u"system thread", cpu, &*KERNEL_PROCESS, false, start_routine, start_ctx);
 	}
 
 	thread->kernel_apc_disable = true;
 
-	auto desc = thread->create_descriptor();
-
-	auto result_handle = KERNEL_HANDLE_TABLE.insert(Handle {std::move(desc)});
-	if (result_handle == INVALID_HANDLE_VALUE) {
-		delete thread;
-		return STATUS_INSUFFICIENT_RESOURCES;
+	auto status = ObInsertObject(
+		thread,
+		nullptr,
+		0,
+		0,
+		nullptr,
+		thread_handle);
+	if (!NT_SUCCESS(status)) {
+		return status;
 	}
-
-	*thread_handle = result_handle;
 
 	assert(client_id == nullptr);
 
 	cpu->scheduler.queue(cpu, thread);
-	return STATUS_SUCCESS;*/
+
 	return STATUS_SUCCESS;
+}
+
+NTAPI NTSTATUS PsTerminateSystemThread(NTSTATUS exit_status) {
+	auto* thread = get_current_thread();
+	if (thread->process != &*KERNEL_PROCESS) {
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	thread->exit(exit_status);
+	panic("thread exit returned");
 }
 
 NTAPI HANDLE PsGetCurrentThreadId() {

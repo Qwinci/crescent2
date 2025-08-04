@@ -4,6 +4,7 @@
 #include "stdio.hpp"
 #include "assert.hpp"
 #include "cstring.hpp"
+#include "mem/mem.hpp"
 
 union UNWIND_CODE {
 	struct {

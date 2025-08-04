@@ -223,6 +223,8 @@ EXPORTS
 
 	PsProcessType
 	PsThreadType
+	PsCreateSystemThread
+	PsTerminateSystemThread
 	PsGetCurrentThreadId
 	PsGetCurrentProcessId
 

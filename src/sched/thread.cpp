@@ -1,22 +1,24 @@
 #include "thread.hpp"
 #include "arch/arch_sched.hpp"
 #include "priv/peb.h"
-#include "assert.hpp"
 #include "fs/object.hpp"
 #include "arch/cpu.hpp"
 #include "apc.hpp"
 #include "arch/irq.hpp"
+#include "process.hpp"
 
 Thread::Thread(kstd::wstring_view name, Cpu* cpu, Process* process)
 	: ArchThread {}, name {name}, cpu {cpu}, process {process} {
 	InitializeListHead(&apc_state.apc_list_head[0]);
 	InitializeListHead(&apc_state.apc_list_head[1]);
+	process->add_thread(this);
 }
 
 Thread::Thread(kstd::wstring_view name, Cpu* cpu, Process* process, bool user, void (*fn)(void*), void* arg)
 	: ArchThread {fn, arg, process, user}, name {name}, cpu {cpu}, process {process} {
 	InitializeListHead(&apc_state.apc_list_head[0]);
 	InitializeListHead(&apc_state.apc_list_head[1]);
+	process->add_thread(this);
 
 	if (user) {
 		UniqueKernelMapping tmp_teb_mapping;
@@ -33,59 +35,22 @@ Thread::Thread(kstd::wstring_view name, Cpu* cpu, Process* process, bool user, v
 	}
 }
 
-ThreadDescriptor::~ThreadDescriptor() {
-	auto old = KeAcquireSpinLockRaiseToDpc(&lock);
-
-	if (thread) {
-		KeAcquireSpinLockAtDpcLevel(&thread->desc_lock);
-		thread->descriptors.remove(this);
-		KeReleaseSpinLockFromDpcLevel(&thread->desc_lock);
-	}
-
-	KeReleaseSpinLock(&lock, old);
+Thread::~Thread() {
+	println("[kernel][sched]: thread ", name, " destroyed");
+	process->remove_thread(this);
 }
 
-void Thread::mark_as_exiting(int exit_status, ThreadDescriptor* skip_lock) {
-	assert(KeGetCurrentIrql() >= DISPATCH_LEVEL);
-	KeAcquireSpinLockAtDpcLevel(&lock);
+void Thread::exit(int new_exit_status) {
+	KeAcquireSpinLockRaiseToDpc(&lock);
 	exiting = true;
+	exit_status = new_exit_status;
 	KeReleaseSpinLockFromDpcLevel(&lock);
 
-	KeAcquireSpinLockAtDpcLevel(&desc_lock);
-
-	for (auto& desc : descriptors) {
-		if (&desc != skip_lock) {
-			KeAcquireSpinLockAtDpcLevel(&desc.lock);
-			assert(desc.thread == this);
-			desc.thread = nullptr;
-			desc.status = exit_status;
-			KeReleaseSpinLockFromDpcLevel(&desc.lock);
-		}
-		else {
-			assert(desc.thread == this);
-			desc.thread = nullptr;
-			desc.status = exit_status;
-		}
+	if (get_current_thread() == this) {
+		dont_block = false;
+		cpu->scheduler.block(ThreadStatus::Terminated);
+		panic("scheduler block returned");
 	}
-
-	descriptors.clear();
-
-	KeReleaseSpinLockFromDpcLevel(&desc_lock);
-}
-
-ThreadDescriptor* Thread::create_descriptor() {
-	/*ObjectWrapper<ThreadDescriptor> desc {};
-	desc->thread = this;
-
-	auto old = KeAcquireSpinLockRaiseToDpc(&desc_lock);
-
-	descriptors.push(desc.get());
-
-	KeReleaseSpinLock(&desc_lock, old);
-
-	return desc;*/
-	assert(false);
-	// todo
 }
 
 BOOLEAN KeTestAlertThread(KPROCESSOR_MODE alert_mode) {
