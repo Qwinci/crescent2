@@ -2,6 +2,7 @@
 #include "types.hpp"
 #include "arch/irql.hpp"
 #include "utils/thread_safety.hpp"
+#include "ntdef.h"
 #include <hz/atomic.hpp>
 
 struct CAPABILITY("spinlock") KSPIN_LOCK {
@@ -12,7 +13,9 @@ struct CAPABILITY("Shared spinlock") EX_SPIN_LOCK {
 	hz::atomic<u32> value;
 };
 
+NTAPI extern "C" void KeInitializeSpinLock(KSPIN_LOCK* lock);
 NTAPI extern "C" void KeAcquireSpinLockAtDpcLevel(KSPIN_LOCK* lock) ACQUIRE(lock);
+NTAPI extern "C" BOOLEAN KeTryToAcquireSpinLockAtDpcLevel(KSPIN_LOCK* lock) TRY_ACQUIRE(true, lock);
 NTAPI extern "C" void KeReleaseSpinLockFromDpcLevel(KSPIN_LOCK* lock) RELEASE(lock);
 NTAPI extern "C" KIRQL KeAcquireSpinLockRaiseToDpc(KSPIN_LOCK* lock) ACQUIRE(lock);
 NTAPI extern "C" void KeReleaseSpinLock(KSPIN_LOCK* lock, KIRQL new_irql) RELEASE(lock);

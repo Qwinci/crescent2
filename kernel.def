@@ -67,8 +67,10 @@ EXPORTS
 	KfRaiseIrql
 	KeLowerIrql
 
+	KeInitializeSpinLock
 	KeAcquireSpinLockRaiseToDpc
 	KeAcquireSpinLockAtDpcLevel
+	KeTryToAcquireSpinLockAtDpcLevel
 	KeReleaseSpinLock
 	KeReleaseSpinLockFromDpcLevel
 

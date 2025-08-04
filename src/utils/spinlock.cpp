@@ -1,5 +1,9 @@
 #include "spinlock.hpp"
 
+NTAPI void KeInitializeSpinLock(KSPIN_LOCK* lock) {
+	lock->value.store(0, hz::memory_order::relaxed);
+}
+
 NO_THREAD_SAFETY_ANALYSIS
 NTAPI void KeAcquireSpinLockAtDpcLevel(KSPIN_LOCK* lock) {
 	while (true) {
@@ -15,6 +19,11 @@ NTAPI void KeAcquireSpinLockAtDpcLevel(KSPIN_LOCK* lock) {
 #endif
 		}
 	}
+}
+
+NO_THREAD_SAFETY_ANALYSIS
+NTAPI BOOLEAN KeTryToAcquireSpinLockAtDpcLevel(KSPIN_LOCK* lock) {
+	return !lock->value.exchange(true, hz::memory_order::acquire);
 }
 
 NO_THREAD_SAFETY_ANALYSIS
