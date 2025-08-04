@@ -86,8 +86,10 @@ NTAPI extern "C" NTSTATUS ZwCreateDirectoryObject(
 
 NTAPI extern "C" void ObfReferenceObject(PVOID object);
 NTAPI extern "C" void ObfDereferenceObject(PVOID object);
+NTAPI extern "C" void ObDereferenceObjectDeferDelete(PVOID object);
 
 NTAPI extern "C" NTSTATUS ob_close_handle(HANDLE handle, KPROCESSOR_MODE previous_mode);
+void object_do_deferred_deletes();
 
 NTAPI extern "C" NTSTATUS ObReferenceObjectByPointer(
 	PVOID object,
@@ -120,4 +122,12 @@ NTAPI extern "C" NTSTATUS ObOpenObjectByName(
 	PACCESS_STATE access_state,
 	ACCESS_MASK desired_access,
 	PVOID parse_ctx,
+	PHANDLE handle);
+NTAPI extern "C" NTSTATUS ObOpenObjectByPointer(
+	PVOID object,
+	ULONG handle_attribs,
+	PACCESS_STATE passed_access_state,
+	ACCESS_MASK desired_access,
+	OBJECT_TYPE* object_type,
+	KPROCESSOR_MODE access_mode,
 	PHANDLE handle);

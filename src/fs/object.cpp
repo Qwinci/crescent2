@@ -782,6 +782,37 @@ NTAPI void ObfDereferenceObject(PVOID object) {
 	}
 }
 
+namespace {
+	KSPIN_LOCK DELETE_LIST_LOCK {};
+	PVOID DEFERRED_DELETE_LIST GUARDED_BY(DELETE_LIST_LOCK) = nullptr;
+}
+
+void object_do_deferred_deletes() {
+	auto old = KeAcquireSpinLockRaiseToDpc(&DELETE_LIST_LOCK);
+	PVOID object = DEFERRED_DELETE_LIST;
+	DEFERRED_DELETE_LIST = nullptr;
+	KeReleaseSpinLock(&DELETE_LIST_LOCK, old);
+
+	while (object) {
+		auto* hdr = get_header(object);
+		auto* next = hdr->next_to_free;
+
+		ObfDereferenceObject(object);
+
+		object = next;
+	}
+}
+
+NTAPI void ObDereferenceObjectDeferDelete(PVOID object) {
+	auto old = KeAcquireSpinLockRaiseToDpc(&DELETE_LIST_LOCK);
+
+	auto* hdr = get_header(object);
+	hdr->next_to_free = DEFERRED_DELETE_LIST;
+	DEFERRED_DELETE_LIST = object;
+
+	KeReleaseSpinLock(&DELETE_LIST_LOCK, old);
+}
+
 NTAPI NTSTATUS ob_close_handle(HANDLE handle, KPROCESSOR_MODE previous_mode) {
 	auto is_kernel = is_kernel_handle(handle);
 	if (is_kernel) {
@@ -932,6 +963,49 @@ NTAPI extern "C" NTSTATUS ObOpenObjectByName(
 	}
 	else {
 		auto h = get_current_thread()->process->handle_table.insert(object, object_attribs->attributes & OBJ_INHERIT);
+
+		if (h == INVALID_HANDLE_VALUE) {
+			ObfDereferenceObject(object);
+			return STATUS_INSUFFICIENT_RESOURCES;
+		}
+
+		*handle = h;
+	}
+
+	return STATUS_SUCCESS;
+}
+
+NTAPI extern "C" NTSTATUS ObOpenObjectByPointer(
+	PVOID object,
+	ULONG handle_attribs,
+	PACCESS_STATE passed_access_state,
+	ACCESS_MASK desired_access,
+	OBJECT_TYPE* object_type,
+	KPROCESSOR_MODE access_mode,
+	PHANDLE handle) {
+	auto* hdr = get_header(object);
+
+	if ((handle_attribs & OBJ_FORCE_ACCESS_CHECK) || access_mode == UserMode) {
+		if (hdr->type_index != object_type->index) {
+			return STATUS_OBJECT_TYPE_MISMATCH;
+		}
+	}
+
+	// todo
+	assert(!(handle_attribs & OBJ_EXCLUSIVE));
+
+	if (hdr->kernel_object || (handle_attribs & OBJ_KERNEL_HANDLE)) {
+		auto h = KERNEL_PROCESS->handle_table.insert(object, handle_attribs & OBJ_INHERIT);
+
+		if (h == INVALID_HANDLE_VALUE) {
+			ObfDereferenceObject(object);
+			return STATUS_INSUFFICIENT_RESOURCES;
+		}
+
+		*handle = to_kernel_handle(h);
+	}
+	else {
+		auto h = get_current_thread()->process->handle_table.insert(object, handle_attribs & OBJ_INHERIT);
 
 		if (h == INVALID_HANDLE_VALUE) {
 			ObfDereferenceObject(object);

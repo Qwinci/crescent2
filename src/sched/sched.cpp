@@ -34,6 +34,8 @@ namespace {
 
 		KeReleaseSpinLock(&scheduler.destroy_lock, old);
 
+		object_do_deferred_deletes();
+
 		scheduler.sleep(NS_IN_S);
 	}
 }

@@ -195,6 +195,9 @@ EXPORTS
 	ObReferenceObjectByPointer
 	ObReferenceObjectByHandle
 	ObfDereferenceObject
+	ObDereferenceObjectDeferDelete
+	ObOpenObjectByName
+	ObOpenObjectByPointer
 
 	NtCreateDirectoryObject
 	ZwCreateDirectoryObject
