@@ -233,6 +233,9 @@ EXPORTS
 	PsTerminateSystemThread
 	PsGetCurrentThreadId
 	PsGetCurrentProcessId
+	PsLookupProcessByProcessId
+	PsGetProcessId
+	PsInitialSystemProcess
 
 	memcmp
 	memcpy

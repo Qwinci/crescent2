@@ -7,6 +7,7 @@
 
 NTAPI extern "C" OBJECT_TYPE* PsProcessType = nullptr;
 NTAPI extern "C" OBJECT_TYPE* PsThreadType = nullptr;
+NTAPI extern "C" Process* PsInitialSystemProcess = nullptr;
 
 void ps_init() {
 	UNICODE_STRING name = RTL_CONSTANT_STRING(u"Process");
@@ -46,6 +47,7 @@ void ps_init() {
 	assert(NT_SUCCESS(status));
 
 	KERNEL_PROCESS = new (ptr) Process {*KERNEL_MAP};
+	PsInitialSystemProcess = KERNEL_PROCESS;
 
 	auto handle = SCHED_HANDLE_TABLE.insert(KERNEL_PROCESS);
 	assert(handle != INVALID_HANDLE_VALUE);
@@ -199,4 +201,23 @@ NTAPI HANDLE PsGetCurrentThreadId() {
 
 NTAPI HANDLE PsGetCurrentProcessId() {
 	return get_current_thread()->process->handle;
+}
+
+NTAPI NTSTATUS PsLookupProcessByProcessId(
+	HANDLE process_id,
+	Process** process) {
+	if (auto proc = SCHED_HANDLE_TABLE.get(process_id)) {
+		if (object_get_full_type(*proc) != PsProcessType) {
+			return STATUS_INVALID_CID;
+		}
+		*process = static_cast<Process*>(*proc);
+		return STATUS_SUCCESS;
+	}
+	else {
+		return STATUS_INVALID_CID;
+	}
+}
+
+NTAPI HANDLE PsGetProcessId(Process* process) {
+	return process->handle;
 }

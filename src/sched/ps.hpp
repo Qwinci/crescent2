@@ -32,3 +32,8 @@ NTAPI extern "C" NTSTATUS PsTerminateSystemThread(NTSTATUS exit_status);
 
 NTAPI extern "C" HANDLE PsGetCurrentThreadId();
 NTAPI extern "C" HANDLE PsGetCurrentProcessId();
+
+NTAPI extern "C" NTSTATUS PsLookupProcessByProcessId(
+	HANDLE process_id,
+	Process** process);
+NTAPI extern "C" HANDLE PsGetProcessId(Process* process);
