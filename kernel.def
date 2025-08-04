@@ -6,6 +6,8 @@ EXPORTS
 	ExAcquireSpinLockShared
 	ExReleaseSpinLockShared
 	ExTryConvertSharedSpinLockExclusive
+	ExAcquireFastMutex
+	ExReleaseFastMutex
 
 	ExAllocatePool2
 	ExAllocatePoolWithTag
@@ -88,6 +90,8 @@ EXPORTS
 	KeInitializeGuardedMutex
 	KeAcquireGuardedMutex
 	KeReleaseGuardedMutex
+	KeInitializeMutex
+	KeReleaseMutex
 
 	KeInitializeDpc
 	KeInsertQueueDpc

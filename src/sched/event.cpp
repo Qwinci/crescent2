@@ -13,7 +13,7 @@ void event_init() {
 }
 
 void KeInitializeEvent(KEVENT* event, EVENT_TYPE type, BOOLEAN state) {
-	event->header.type = static_cast<u8>(type);
+	event->header.type = static_cast<KOBJECTS>(type);
 	event->header.reserved.store(0, hz::memory_order::relaxed);
 	event->header.signal_state = state;
 	InitializeListHead(&event->header.wait_list_head);

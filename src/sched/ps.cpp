@@ -163,7 +163,7 @@ NTAPI NTSTATUS PsCreateSystemThread(
 		thread = create_thread(u"system thread", cpu, &*KERNEL_PROCESS, false, start_routine, start_ctx);
 	}
 
-	thread->kernel_apc_disable = true;
+	thread->kernel_apc_disable = 1;
 
 	auto status = ObInsertObject(
 		thread,

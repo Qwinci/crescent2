@@ -4,6 +4,8 @@
 #include "sys/misc.hpp"
 #include "utils/except.hpp"
 #include "arch/arch_syscall.hpp"
+#include "mutex.hpp"
+#include "atomic.hpp"
 #include <hz/container_of.hpp>
 
 void dispatch_header_queue_one_waiter(DISPATCHER_HEADER* header) {
@@ -103,7 +105,32 @@ NTAPI NTSTATUS KeWaitForMultipleObjects(
 			auto* ptr = reinterpret_cast<hz::atomic<i32>*>(&header->signal_state);
 
 			auto value = ptr->load(hz::memory_order::acquire);
-			while (value) {
+
+			if (header->type == MutantObject && value <= 0) {
+				auto* mutant = reinterpret_cast<KMUTANT*>(header);
+				if (atomic_load(&mutant->owner_thread, memory_order::relaxed) == thread) {
+					ptr->fetch_sub(1, hz::memory_order::relaxed);
+
+					for (u32 j = 0; j < i; ++j) {
+						auto& block = wait_block_array[j];
+						header = static_cast<DISPATCHER_HEADER*>(objects[j]);
+
+						acquire_dispatch_header_lock(header);
+
+						if (block.thread) {
+							RemoveEntryList(&block.wait_list_entry);
+						}
+
+						release_dispatch_header_lock(header);
+					}
+
+					thread->dont_block = false;
+					KeLowerIrql(old);
+					return static_cast<NTSTATUS>(i);
+				}
+			}
+
+			while (value > 0) {
 				if (ptr->compare_exchange_weak(
 					value,
 					value - 1,
@@ -120,6 +147,15 @@ NTAPI NTSTATUS KeWaitForMultipleObjects(
 						}
 
 						release_dispatch_header_lock(header);
+					}
+
+					if (header->type == MutantObject) {
+						auto* mutant = reinterpret_cast<KMUTANT*>(header);
+						mutant->owner_thread = thread;
+
+						if (mutant->apc_disable) {
+							KeEnterCriticalRegion();
+						}
 					}
 
 					thread->dont_block = false;
@@ -143,13 +179,37 @@ NTAPI NTSTATUS KeWaitForMultipleObjects(
 			auto* ptr = reinterpret_cast<hz::atomic<i32>*>(&header->signal_state);
 
 			auto value = ptr->load(hz::memory_order::acquire);
+
+			if (header->type == MutantObject && value <= 0) {
+				auto* mutant = reinterpret_cast<KMUTANT*>(header);
+				if (atomic_load(&mutant->owner_thread, memory_order::relaxed) == thread) {
+					ptr->fetch_sub(1, hz::memory_order::relaxed);
+
+					if (i == count - 1) {
+						KeLowerIrql(old);
+						return STATUS_SUCCESS;
+					}
+
+					continue;
+				}
+			}
+
 			bool success = false;
-			while (value) {
+			while (value > 0) {
 				if (ptr->compare_exchange_weak(
 					value,
 					value - 1,
 					hz::memory_order::acquire,
 					hz::memory_order::acquire)) {
+					if (header->type == MutantObject) {
+						auto* mutant = reinterpret_cast<KMUTANT*>(header);
+						mutant->owner_thread = thread;
+
+						if (mutant->apc_disable) {
+							KeEnterCriticalRegion();
+						}
+					}
+
 					if (i == count - 1) {
 						KeLowerIrql(old);
 						return STATUS_SUCCESS;

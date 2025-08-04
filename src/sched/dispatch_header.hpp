@@ -4,12 +4,25 @@
 #include "utils/thread_safety.hpp"
 #include <hz/atomic.hpp>
 
+enum KOBJECTS : uint8_t {
+	EventNotificationObject,
+	EventSynchronizationObject,
+	MutantObject,
+	ProcessObject,
+	QueueObject,
+	SemaphoreObject,
+	ThreadObject,
+	GateObject,
+	TimerNotificationObject,
+	TimerSynchronizationObject
+};
+
 struct CAPABILITY("dispatch header") DISPATCHER_HEADER {
 	union {
 		u32 align;
 
 		struct {
-			u8 type;
+			KOBJECTS type;
 			u8 signalling;
 			u8 size;
 			hz::atomic<u8> reserved;
