@@ -71,8 +71,14 @@ struct [[gnu::aligned(64)]] PAGED_LOOKASIDE_LIST {
 	GENERAL_LOOKASIDE l;
 };
 
+struct [[gnu::aligned(64)]] NPAGED_LOOKASIDE_LIST {
+	GENERAL_LOOKASIDE l;
+};
+
 #define POOL_QUOTA_FAIL_INSTEAD_OF_RAISE 8
 #define POOL_RAISE_IF_ALLOCATION_FAILURE 16
+
+#define POOL_NX_ALLOCATION 512
 
 NTAPI extern "C" void ExInitializePagedLookasideList(
 	PAGED_LOOKASIDE_LIST* list,
@@ -83,3 +89,13 @@ NTAPI extern "C" void ExInitializePagedLookasideList(
 	ULONG tag,
 	USHORT depth);
 NTAPI extern "C" void ExDeletePagedLookasideList(PAGED_LOOKASIDE_LIST* list);
+
+NTAPI extern "C" void ExInitializeNPagedLookasideList(
+	NPAGED_LOOKASIDE_LIST* list,
+	PALLOCATE_FUNCTION allocate,
+	PFREE_FUNCTION free,
+	ULONG flags,
+	SIZE_T size,
+	ULONG tag,
+	USHORT depth);
+NTAPI extern "C" void ExDeleteNPagedLookasideList(NPAGED_LOOKASIDE_LIST* list);

@@ -34,6 +34,8 @@ EXPORTS
 
 	ExInitializePagedLookasideList
 	ExDeletePagedLookasideList
+	ExInitializeNPagedLookasideList
+	ExDeleteNPagedLookasideList
 
 	ExSystemTimeToLocalTime
 
